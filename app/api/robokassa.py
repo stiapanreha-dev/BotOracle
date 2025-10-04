@@ -83,7 +83,7 @@ async def robokassa_success(request: Request):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Оплата успешна - Bot Oracle</title>
+        <title>Оплата успешна - Oracle Lounge</title>
         <style>
             * {{
                 margin: 0;
@@ -272,7 +272,7 @@ async def robokassa_fail(request: Request):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Ошибка оплаты - Bot Oracle</title>
+        <title>Ошибка оплаты - Oracle Lounge</title>
         <style>
             * {{
                 margin: 0;

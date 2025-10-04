@@ -1,5 +1,5 @@
 """
-Bot Oracle main handlers implementing two-role system:
+Oracle Lounge main handlers implementing two-role system:
 1. Administrator - emotional, proactive, handles daily messages and free questions
 2. Oracle - wise, calm, answers only subscription questions (10/day limit)
 """
@@ -573,7 +573,7 @@ async def buy_subscription_callback(callback: types.CallbackQuery):
 
         # Generate payment URL
         plan_descriptions = {"DAY": "Подписка на день", "WEEK": "Подписка на неделю", "MONTH": "Подписка на месяц"}
-        description = plan_descriptions.get(plan, "Подписка Bot Oracle")
+        description = plan_descriptions.get(plan, "Подписка Oracle Lounge")
         payment_url = generate_payment_url(amount, str(inv_id), description)
 
         await callback.message.answer(
@@ -614,7 +614,7 @@ async def admin_panel_handler(message: types.Message):
 async def help_handler(message: types.Message):
     """Show help information"""
     help_text = """
-🤖 **Bot Oracle - Справка**
+🤖 **Oracle Lounge - Справка**
 
 **Доступные команды:**
 • 📨 Сообщение дня - получить ежедневное сообщение

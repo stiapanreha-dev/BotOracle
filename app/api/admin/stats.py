@@ -229,7 +229,7 @@ async def health_check():
 
         return {
             "status": "healthy",
-            "service": "Bot Oracle",
+            "service": "Oracle Lounge",
             "version": "2.0.0",
             "commit": git_hash,
             "timestamp": datetime.now().isoformat()
