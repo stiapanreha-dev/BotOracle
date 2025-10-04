@@ -109,14 +109,25 @@ class AIClient:
                     {"role": "user", "content": f"Пользователь спрашивает: {question}"}
                 ],
                 temperature=0.8,
-                max_tokens=200
+                max_tokens=300  # Increased from 200 to allow more natural responses
             )
 
             response = result.choices[0].message.content.strip()
 
-            # Ensure response isn't too long (max 300 chars for admin)
-            if len(response) > 300:
-                response = response[:297] + "..."
+            # Emergency fallback: if response is too long, truncate at last sentence
+            if len(response) > 500:
+                truncated = response[:497]
+                # Try to cut at last sentence (period, question mark, exclamation)
+                last_sentence = max(
+                    truncated.rfind('.'),
+                    truncated.rfind('!'),
+                    truncated.rfind('?')
+                )
+                if last_sentence > 200:  # Only if we have at least some content
+                    response = truncated[:last_sentence + 1]
+                else:
+                    response = truncated + "..."
+                logger.warning(f"Admin response truncated from original to {len(response)} chars")
 
             logger.info(f"Admin AI response generated: {len(response)} chars")
             return response
@@ -312,9 +323,11 @@ class AIClient:
 ТОНАЛЬНОСТЬ: {tone_guide}
 
 ОГРАНИЧЕНИЯ:
-- Отвечай кратко (1-3 предложения максимум)
+- Отвечай ОЧЕНЬ кратко: 1-2 предложения, максимум 3
+- Твой ответ должен быть логически законченным, но коротким
 - Не давай глубоких философских советов - это работа Оракула
 - Всегда помни: ты админ, а не мудрец
+- ВАЖНО: Формулируй ответ так, чтобы он был коротким И законченным, без обрывов мысли
 {selling_guide}
 
 СТИЛЬ ОТВЕТА:

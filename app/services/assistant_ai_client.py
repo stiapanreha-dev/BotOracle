@@ -128,9 +128,11 @@ class AssistantAIClient:
 - НЕ мудрец, НЕ философ - ты обычный помощник с эмоциями
 
 ОГРАНИЧЕНИЯ:
-- Отвечай кратко (1-3 предложения максимум)
+- Отвечай ОЧЕНЬ кратко: 1-2 предложения, максимум 3
+- Твой ответ должен быть логически законченным, но коротким
 - Не давай глубоких философских советов - это работа Оракула
 - Всегда помни: ты админ, а не мудрец
+- ВАЖНО: Формулируй ответ так, чтобы он был коротким И законченным, без обрывов мысли
 
 СТИЛЬ ОТВЕТА:
 - Живой, эмоциональный язык
@@ -297,9 +299,20 @@ class AssistantAIClient:
             # Wait for completion
             response = await self._wait_for_run_completion(thread_id, run.id)
 
-            # Limit response length
-            if len(response) > 300:
-                response = response[:297] + "..."
+            # Emergency fallback: if response is too long, truncate at last sentence
+            if len(response) > 500:
+                truncated = response[:497]
+                # Try to cut at last sentence (period, question mark, exclamation)
+                last_sentence = max(
+                    truncated.rfind('.'),
+                    truncated.rfind('!'),
+                    truncated.rfind('?')
+                )
+                if last_sentence > 200:  # Only if we have at least some content
+                    response = truncated[:last_sentence + 1]
+                else:
+                    response = truncated + "..."
+                logger.warning(f"Admin response truncated from {len(response)} to {len(response)} chars")
 
             logger.info(f"Admin assistant response: {len(response)} chars")
 
