@@ -426,12 +426,21 @@ class AssistantAIClient:
                                    free_chat: bool = False, archetype_primary: str = None,
                                    archetype_secondary: str = None) -> str:
         """Build context information for Admin"""
+        # Use archetype-based tone if available, otherwise age-based
         tone = ""
-        if age <= 25:
-            tone = "Будь игривой, используй эмодзи, молодежный сленг."
-        elif age >= 46:
-            tone = "Будь заботливой и уважительной, меньше эмодзи."
+        if archetype_primary:
+            # Archetype-based personalization takes priority
+            tone = "Адаптируй стиль общения под архетип пользователя."
+        elif age:
+            # Fallback to age-based tone for legacy users
+            if age <= 25:
+                tone = "Будь игривой, используй эмодзи, молодежный сленг."
+            elif age >= 46:
+                tone = "Будь заботливой и уважительной, меньше эмодзи."
+            else:
+                tone = "Дружелюбно, умеренное количество эмодзи."
         else:
+            # Default neutral tone
             tone = "Дружелюбно, умеренное количество эмодзи."
 
         selling = ""

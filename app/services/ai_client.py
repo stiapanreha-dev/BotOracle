@@ -217,16 +217,24 @@ class AIClient:
                 logger.error("Admin base prompt not found, using hardcoded fallback")
                 return self._hardcoded_admin_prompt(age, has_subscription, free_chat, archetype_primary)
 
-            # Get age-specific tone
-            if age <= 25:
-                tone = await self._get_prompt('admin_tone_young')
-            elif age >= 46:
-                tone = await self._get_prompt('admin_tone_senior')
-            else:
-                tone = await self._get_prompt('admin_tone_middle')
+            # Get tone: prioritize archetype-based, fallback to age-based
+            if archetype_primary:
+                # Archetype-based tone takes priority
+                tone = "ТОНАЛЬНОСТЬ: Адаптируй стиль общения под архетип пользователя (см. АРХЕТИП ПОЛЬЗОВАТЕЛЯ ниже)."
+            elif age:
+                # Age-specific tone for legacy users
+                if age <= 25:
+                    tone = await self._get_prompt('admin_tone_young')
+                elif age >= 46:
+                    tone = await self._get_prompt('admin_tone_senior')
+                else:
+                    tone = await self._get_prompt('admin_tone_middle')
 
-            if not tone:
-                logger.warning("Admin tone prompt not found, using default")
+                if not tone:
+                    logger.warning("Admin tone prompt not found, using default")
+                    tone = "ТОНАЛЬНОСТЬ: Держи баланс - дружелюбно, но не слишком игриво. Умеренное количество эмодзи."
+            else:
+                # Default neutral tone
                 tone = "ТОНАЛЬНОСТЬ: Держи баланс - дружелюбно, но не слишком игриво. Умеренное количество эмодзи."
 
             # Add archetype information if available
@@ -250,11 +258,17 @@ class AIClient:
     def _hardcoded_admin_prompt(self, age: int, has_subscription: bool = False, free_chat: bool = False,
                                 archetype_primary: str = None) -> str:
         """Hardcoded fallback for admin prompt"""
+        # Tone: prioritize archetype, fallback to age-based
         tone_guide = ""
-        if age <= 25:
-            tone_guide = "Будь игривой, используй эмодзи, молодежный сленг. Можешь быть чуть капризной или кокетливой."
-        elif age >= 46:
-            tone_guide = "Будь заботливой и уважительной, но сохраняй теплоту. Меньше эмодзи, более серьезный тон."
+        if archetype_primary:
+            tone_guide = "Адаптируй стиль общения под архетип пользователя (Мудрец, Герой, и т.д.)."
+        elif age:
+            if age <= 25:
+                tone_guide = "Будь игривой, используй эмодзи, молодежный сленг. Можешь быть чуть капризной или кокетливой."
+            elif age >= 46:
+                tone_guide = "Будь заботливой и уважительной, но сохраняй теплоту. Меньше эмодзи, более серьезный тон."
+            else:
+                tone_guide = "Держи баланс - дружелюбно, но не слишком игриво. Умеренное количество эмодзи."
         else:
             tone_guide = "Держи баланс - дружелюбно, но не слишком игриво. Умеренное количество эмодзи."
 
