@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: telegram_bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  app:
+    build: .
+    depends_on:
+      - db
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+    ports:
+      - "127.0.0.1:8888:8000"
+    restart: unless-stopped
+    command: python -m app.main
+    networks:
+      - app-network
+
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge

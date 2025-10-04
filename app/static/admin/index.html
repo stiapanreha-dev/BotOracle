@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="styles.css?v=3">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>📊 Admin Panel</h1>
+            <p class="subtitle">Bot Oracle Management</p>
+        </header>
+
+        <div class="dashboard" id="dashboard">
+            <div class="card">
+                <div class="card-icon">👥</div>
+                <div class="card-content">
+                    <div class="card-value" id="totalUsers">-</div>
+                    <div class="card-label">Всего пользователей</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">✅</div>
+                <div class="card-content">
+                    <div class="card-value" id="activeToday">-</div>
+                    <div class="card-label">Активных сегодня</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📈</div>
+                <div class="card-content">
+                    <div class="card-value" id="activeWeek">-</div>
+                    <div class="card-label">Активных за неделю</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">🆕</div>
+                <div class="card-content">
+                    <div class="card-value" id="newToday">-</div>
+                    <div class="card-label">Новых сегодня</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">💎</div>
+                <div class="card-content">
+                    <div class="card-value" id="activeSubs">-</div>
+                    <div class="card-label">Активных подписок</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">💰</div>
+                <div class="card-content">
+                    <div class="card-value" id="todayRevenue">-</div>
+                    <div class="card-label">Выручка сегодня</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">📊</div>
+                <div class="card-content">
+                    <div class="card-value" id="monthRevenue">-</div>
+                    <div class="card-label">Выручка за месяц</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-icon">💳</div>
+                <div class="card-content">
+                    <div class="card-value" id="paymentsToday">-</div>
+                    <div class="card-label">Оплат сегодня</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin: 20px 0;">
+            <button id="testCrmBtn" class="test-crm-btn">🧪 Тест CRM</button>
+            <div id="crmTestResults" class="crm-test-results" style="display: none;"></div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="users">Users</button>
+            <button class="tab" data-tab="subscriptions">Subscriptions</button>
+            <button class="tab" data-tab="events">Events</button>
+            <button class="tab" data-tab="tasks">Tasks</button>
+            <button class="tab" data-tab="templates">Templates</button>
+            <button class="tab" data-tab="daily-messages">Daily Msgs</button>
+            <button class="tab" data-tab="prompts">AI Prompts</button>
+            <button class="tab" data-tab="sessions">AI Sessions</button>
+        </div>
+
+        <div class="tab-content active" id="users-tab">
+            <div class="filters">
+                <button class="filter-btn active" data-filter="">All</button>
+                <button class="filter-btn" data-filter="active">Active</button>
+                <button class="filter-btn" data-filter="paid">Paid</button>
+                <button class="filter-btn" data-filter="blocked">Blocked</button>
+            </div>
+            <div class="list" id="usersList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="subscriptions-tab">
+            <div class="filters">
+                <button class="filter-btn active" data-filter-sub="">All</button>
+                <button class="filter-btn" data-filter-sub="active">Active</button>
+                <button class="filter-btn" data-filter-sub="expired">Expired</button>
+            </div>
+            <div class="list" id="subscriptionsList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="events-tab">
+            <div style="margin-bottom: 16px;">
+                <button id="createEventBtn" class="test-crm-btn">➕ Create Event</button>
+            </div>
+            <div class="list" id="eventsList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="tasks-tab">
+            <div style="margin-bottom: 16px;">
+                <button id="createTaskBtn" class="test-crm-btn">➕ Create Task</button>
+            </div>
+            <div class="list" id="tasksList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="templates-tab">
+            <div style="margin-bottom: 16px;">
+                <button id="createTemplateBtn" class="test-crm-btn">➕ Create Template</button>
+            </div>
+            <div class="list" id="templatesList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="daily-messages-tab">
+            <div style="margin-bottom: 16px;">
+                <button id="createDailyMsgBtn" class="test-crm-btn">➕ Create Daily Message</button>
+            </div>
+            <div class="list" id="dailyMessagesList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="prompts-tab">
+            <div style="margin-bottom: 16px;">
+                <button id="createPromptBtn" class="test-crm-btn">➕ Create AI Prompt</button>
+            </div>
+            <div class="filters">
+                <button class="filter-btn active" data-filter-prompt="">All</button>
+                <button class="filter-btn" data-filter-prompt="true">Active</button>
+                <button class="filter-btn" data-filter-prompt="false">Inactive</button>
+            </div>
+            <div class="list" id="promptsList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="sessions-tab">
+            <div style="margin-bottom: 16px; padding: 12px; background: var(--tg-theme-secondary-bg-color, #f0f0f0); border-radius: 8px; border-left: 4px solid var(--tg-theme-button-color, #3390ec);">
+                <strong>🧠 AI Sessions (Assistants API)</strong><br>
+                <span style="font-size: 13px; opacity: 0.7;">Активные сессии пользователей с OpenAI Assistants. Каждый пользователь имеет отдельный thread для Admin и Oracle.</span>
+            </div>
+            <div class="list" id="sessionsList">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Details Modal -->
+    <div id="userModal" class="modal" onclick="if(event.target === this) closeUserModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>User Details</h2>
+                <button class="modal-close" onclick="closeUserModal()">×</button>
+            </div>
+            <div id="userModalBody" class="modal-body">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Create/Edit Modal -->
+    <div id="eventModal" class="modal" onclick="if(event.target === this) closeEventModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="eventModalTitle">Create Event</h2>
+                <button class="modal-close" onclick="closeEventModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="eventForm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" id="eventId">
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">User ID (optional)</label>
+                        <input type="number" id="eventUserId" placeholder="User ID" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Event Type *</label>
+                        <input type="text" id="eventType" placeholder="e.g. user_registered, payment_success" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Meta (JSON)</label>
+                        <textarea id="eventMeta" placeholder='{"key": "value"}' rows="4" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: monospace;"></textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button type="submit" class="test-crm-btn" style="flex: 1;">Save</button>
+                        <button type="button" onclick="closeEventModal()" style="flex: 1; padding: 12px; background: #ccc; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Create/Edit Modal -->
+    <div id="taskModal" class="modal" onclick="if(event.target === this) closeTaskModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="taskModalTitle">Create Task</h2>
+                <button class="modal-close" onclick="closeTaskModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" id="taskId">
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">User ID (optional)</label>
+                        <input type="number" id="taskUserId" placeholder="User ID" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Task Type *</label>
+                        <input type="text" id="taskType" placeholder="e.g. PING, NUDGE, THANKS" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Status *</label>
+                        <select id="taskStatus" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                            <option value="scheduled">scheduled</option>
+                            <option value="due">due</option>
+                            <option value="sent">sent</option>
+                            <option value="failed">failed</option>
+                            <option value="cancelled">cancelled</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Payload (JSON)</label>
+                        <textarea id="taskPayload" placeholder='{"key": "value"}' rows="3" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: monospace;"></textarea>
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Scheduled At</label>
+                        <input type="datetime-local" id="taskScheduledAt" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Due At</label>
+                        <input type="datetime-local" id="taskDueAt" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button type="submit" class="test-crm-btn" style="flex: 1;">Save</button>
+                        <button type="button" onclick="closeTaskModal()" style="flex: 1; padding: 12px; background: #ccc; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Create/Edit Modal -->
+    <div id="templateModal" class="modal" onclick="if(event.target === this) closeTemplateModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="templateModalTitle">Create Template</h2>
+                <button class="modal-close" onclick="closeTemplateModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="templateForm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" id="templateId">
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Template Type *</label>
+                        <input type="text" id="templateType" placeholder="e.g. PING, NUDGE, THANKS" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Tone *</label>
+                        <input type="text" id="templateTone" placeholder="e.g. casual, supportive, wisdom" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Template Text *</label>
+                        <textarea id="templateText" placeholder="Template text with {name}, {age}, {gender} placeholders" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"></textarea>
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Weight *</label>
+                        <input type="number" id="templateWeight" placeholder="1-100" min="1" max="100" value="10" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="templateEnabled" checked style="width: 20px; height: 20px; cursor: pointer;">
+                        <label for="templateEnabled" style="font-size: 14px; cursor: pointer;">Enabled</label>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button type="submit" class="test-crm-btn" style="flex: 1;">Save</button>
+                        <button type="button" onclick="closeTemplateModal()" style="flex: 1; padding: 12px; background: #ccc; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Message Create/Edit Modal -->
+    <div id="dailyMessageModal" class="modal" onclick="if(event.target === this) closeDailyMessageModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="dailyMessageModalTitle">Create Daily Message</h2>
+                <button class="modal-close" onclick="closeDailyMessageModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="dailyMessageForm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" id="dailyMessageId">
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Message Text *</label>
+                        <textarea id="dailyMessageText" placeholder="Daily message text" rows="5" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;"></textarea>
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Weight *</label>
+                        <input type="number" id="dailyMessageWeight" placeholder="1-100" min="1" max="100" value="10" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="dailyMessageActive" checked style="width: 20px; height: 20px; cursor: pointer;">
+                        <label for="dailyMessageActive" style="font-size: 14px; cursor: pointer;">Active</label>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button type="submit" class="test-crm-btn" style="flex: 1;">Save</button>
+                        <button type="button" onclick="closeDailyMessageModal()" style="flex: 1; padding: 12px; background: #ccc; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Prompt Create/Edit Modal -->
+    <div id="promptModal" class="modal" onclick="if(event.target === this) closePromptModal()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="promptModalTitle">Create AI Prompt</h2>
+                <button class="modal-close" onclick="closePromptModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="promptForm" style="display: flex; flex-direction: column; gap: 12px;">
+                    <input type="hidden" id="promptId">
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Key *</label>
+                        <input type="text" id="promptKey" placeholder="e.g. admin_base, oracle_system" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Name *</label>
+                        <input type="text" id="promptName" placeholder="Human-readable name" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Description</label>
+                        <input type="text" id="promptDescription" placeholder="Optional description" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                    </div>
+
+                    <div>
+                        <label style="display: block; margin-bottom: 4px; font-size: 13px; opacity: 0.8;">Prompt Text *</label>
+                        <textarea id="promptText" placeholder="Full prompt text for AI" rows="8" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: monospace;"></textarea>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="promptActive" checked style="width: 20px; height: 20px; cursor: pointer;">
+                        <label for="promptActive" style="font-size: 14px; cursor: pointer;">Active</label>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                        <button type="submit" class="test-crm-btn" style="flex: 1;">Save</button>
+                        <button type="button" onclick="closePromptModal()" style="flex: 1; padding: 12px; background: #ccc; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=3"></script>
+</body>
+</html>
