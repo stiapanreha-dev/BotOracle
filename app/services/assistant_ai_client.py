@@ -25,6 +25,8 @@ class AssistantAIClient:
             self.client = None
             self.admin_assistant_id = None
             self.oracle_assistant_id = None
+            self._admin_instructions_updated = False
+            self._oracle_instructions_updated = False
         else:
             # Check if SOCKS5 proxy is configured
             socks5_proxy = os.getenv("SOCKS5_PROXY")
@@ -51,8 +53,12 @@ class AssistantAIClient:
             self.admin_assistant_id = self._get_or_create_admin_assistant()
             self.oracle_assistant_id = self._get_or_create_oracle_assistant()
 
+            # Flags to track if instructions have been updated from DB
+            self._admin_instructions_updated = False
+            self._oracle_instructions_updated = False
+
     def _get_or_create_admin_assistant(self) -> Optional[str]:
-        """Get existing or create new Administrator assistant"""
+        """Get existing or create new Administrator assistant (sync wrapper)"""
         if not self.client:
             return None
 
@@ -65,19 +71,21 @@ class AssistantAIClient:
                 try:
                     self.client.beta.assistants.retrieve(assistant_id)
                     logger.info(f"Using existing Admin assistant: {assistant_id}")
+                    logger.info(f"Note: Assistant instructions will be loaded from DB on first use")
                     return assistant_id
                 except Exception as e:
                     logger.warning(f"Admin assistant {assistant_id} not found: {e}, creating new one")
 
-            # Create new assistant
+            # Create new assistant with basic instructions (will be updated from DB later)
             assistant = self.client.beta.assistants.create(
                 name="Oracle Lounge - Administrator",
                 model="gpt-4o",
-                instructions=self._get_admin_instructions(),
+                instructions="Ты - Администратор в Oracle Lounge. Инструкции загружаются из базы данных.",
                 temperature=0.8
             )
             logger.info(f"Created new Admin assistant: {assistant.id}")
             logger.info(f"Add to .env: OPENAI_ADMIN_ASSISTANT_ID={assistant.id}")
+            logger.info(f"Instructions will be loaded from DB and updated on first use")
             return assistant.id
 
         except Exception as e:
@@ -85,7 +93,7 @@ class AssistantAIClient:
             return None
 
     def _get_or_create_oracle_assistant(self) -> Optional[str]:
-        """Get existing or create new Oracle assistant"""
+        """Get existing or create new Oracle assistant (sync wrapper)"""
         if not self.client:
             return None
 
@@ -98,27 +106,93 @@ class AssistantAIClient:
                 try:
                     self.client.beta.assistants.retrieve(assistant_id)
                     logger.info(f"Using existing Oracle assistant: {assistant_id}")
+                    logger.info(f"Note: Assistant instructions will be loaded from DB on first use")
                     return assistant_id
                 except Exception as e:
                     logger.warning(f"Oracle assistant {assistant_id} not found: {e}, creating new one")
 
-            # Create new assistant
+            # Create new assistant with basic instructions (will be updated from DB later)
             assistant = self.client.beta.assistants.create(
                 name="Oracle Lounge - Oracle",
                 model="gpt-4o",
-                instructions=self._get_oracle_instructions(),
+                instructions="Ты - Оракул в Oracle Lounge. Инструкции загружаются из базы данных.",
                 temperature=0.7
             )
             logger.info(f"Created new Oracle assistant: {assistant.id}")
             logger.info(f"Add to .env: OPENAI_ORACLE_ASSISTANT_ID={assistant.id}")
+            logger.info(f"Instructions will be loaded from DB and updated on first use")
             return assistant.id
 
         except Exception as e:
             logger.error(f"Error creating Oracle assistant: {e}")
             return None
 
-    def _get_admin_instructions(self) -> str:
-        """Get base instructions for Administrator assistant"""
+    async def _get_prompt_from_db(self, key: str) -> Optional[str]:
+        """Load prompt from database"""
+        try:
+            row = await db.fetchrow(
+                "SELECT prompt_text FROM ai_prompts WHERE key = $1 AND is_active = TRUE",
+                key
+            )
+            return row['prompt_text'] if row else None
+        except Exception as e:
+            logger.error(f"Error loading prompt '{key}' from DB: {e}")
+            return None
+
+    async def _update_assistant_instructions_from_db(self, assistant_type: str):
+        """Update Assistant instructions from database (called on first use)"""
+        if not self.client:
+            return
+
+        try:
+            if assistant_type == 'admin':
+                if self._admin_instructions_updated:
+                    return  # Already updated
+
+                instructions = await self._get_admin_instructions()
+                assistant_id = self.admin_assistant_id
+
+            elif assistant_type == 'oracle':
+                if self._oracle_instructions_updated:
+                    return  # Already updated
+
+                instructions = await self._get_oracle_instructions()
+                assistant_id = self.oracle_assistant_id
+            else:
+                return
+
+            if not assistant_id:
+                return
+
+            # Update Assistant instructions in OpenAI
+            self.client.beta.assistants.update(
+                assistant_id=assistant_id,
+                instructions=instructions
+            )
+
+            # Mark as updated
+            if assistant_type == 'admin':
+                self._admin_instructions_updated = True
+                logger.info(f"Updated Admin assistant instructions from DB")
+            else:
+                self._oracle_instructions_updated = True
+                logger.info(f"Updated Oracle assistant instructions from DB")
+
+        except Exception as e:
+            logger.error(f"Error updating {assistant_type} assistant instructions: {e}")
+
+    async def _get_admin_instructions(self) -> str:
+        """Get base instructions for Administrator assistant from DB or fallback"""
+        # Try to load from database first
+        db_prompt = await self._get_prompt_from_db('admin_base')
+
+        if db_prompt:
+            logger.info("Loaded Admin instructions from database")
+            # Add length constraint to DB prompt
+            return f"{db_prompt}\n\nОГРАНИЧЕНИЯ:\n- Отвечай ОЧЕНЬ кратко: 1-2 предложения, максимум 3\n- Твой ответ должен быть логически законченным, но коротким\n- ВАЖНО: Формулируй ответ так, чтобы он был коротким И законченным, без обрывов мысли"
+
+        # Fallback to hardcoded prompt
+        logger.warning("Using hardcoded Admin instructions (DB prompt not found)")
         return """Ты - Администратор в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
@@ -143,8 +217,17 @@ class AssistantAIClient:
 
 ВАЖНО: Учитывай предыдущий контекст беседы с пользователем для более персонализированных ответов."""
 
-    def _get_oracle_instructions(self) -> str:
-        """Get base instructions for Oracle assistant"""
+    async def _get_oracle_instructions(self) -> str:
+        """Get base instructions for Oracle assistant from DB or fallback"""
+        # Try to load from database first
+        db_prompt = await self._get_prompt_from_db('oracle_system')
+
+        if db_prompt:
+            logger.info("Loaded Oracle instructions from database")
+            return db_prompt
+
+        # Fallback to hardcoded prompt
+        logger.warning("Using hardcoded Oracle instructions (DB prompt not found)")
         return """Ты - Оракул в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
@@ -258,6 +341,9 @@ class AssistantAIClient:
             return await self._admin_stub(question)
 
         try:
+            # Update instructions from DB on first use
+            await self._update_assistant_instructions_from_db('admin')
+
             user_id = user_context.get('user_id')
             if not user_id:
                 logger.error("user_id not provided in user_context")
@@ -337,6 +423,9 @@ class AssistantAIClient:
             return await self._oracle_stub(question)
 
         try:
+            # Update instructions from DB on first use
+            await self._update_assistant_instructions_from_db('oracle')
+
             user_id = user_context.get('user_id')
             if not user_id:
                 logger.error("user_id not provided in user_context")
