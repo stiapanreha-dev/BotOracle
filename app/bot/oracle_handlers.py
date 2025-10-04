@@ -337,7 +337,7 @@ async def question_handler(message: types.Message, state: FSMContext):
                 oracle_msg = await message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
 
                 full_answer = ""
-                display_text = "🔮 **Оракул отвечает:**\n\n"
+                display_text = "🔮 "
                 last_update = asyncio.get_event_loop().time()
 
                 async for chunk in call_oracle_ai_stream(question, user_context):
@@ -417,7 +417,7 @@ async def question_handler(message: types.Message, state: FSMContext):
                 oracle_msg = await message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
 
                 full_answer = ""
-                display_text = "🔮 **Оракул отвечает:**\n\n"
+                display_text = "🔮 "
                 last_update = asyncio.get_event_loop().time()
 
                 async for chunk in call_oracle_ai_stream(question, user_context):
