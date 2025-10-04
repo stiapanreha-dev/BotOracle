@@ -570,3 +570,96 @@ class PaymentModel:
         )
 
 
+class ArchetypeModel:
+    @staticmethod
+    async def get_archetype(code: str) -> Optional[dict]:
+        """Get archetype information by code"""
+        archetype = await db.fetchrow(
+            "SELECT * FROM archetypes WHERE code = $1 AND is_active = TRUE",
+            code
+        )
+        return dict(archetype) if archetype else None
+
+    @staticmethod
+    async def get_all_active() -> list:
+        """Get all active archetypes"""
+        archetypes = await db.fetch(
+            "SELECT * FROM archetypes WHERE is_active = TRUE ORDER BY id"
+        )
+        return [dict(a) for a in archetypes]
+
+    @staticmethod
+    async def update_user_archetype(user_id: int, primary: str, secondary: str = None,
+                                   archetype_data: dict = None):
+        """Update user's archetype information"""
+        await db.execute(
+            """
+            UPDATE users
+            SET archetype_primary = $1,
+                archetype_secondary = $2,
+                archetype_data = $3,
+                onboarding_completed = TRUE
+            WHERE id = $4
+            """,
+            primary, secondary, json.dumps(archetype_data or {}), user_id
+        )
+
+        await EventModel.log_event(
+            user_id=user_id,
+            event_type='archetype_assigned',
+            meta={
+                'primary': primary,
+                'secondary': secondary,
+                'confidence': archetype_data.get('confidence') if archetype_data else None
+            }
+        )
+
+
+class OnboardingModel:
+    @staticmethod
+    async def save_response(user_id: int, question_number: int, question_text: str,
+                           user_response: str, is_valid: bool = True, ai_analysis: dict = None):
+        """Save user response during onboarding"""
+        response_id = await db.fetchval(
+            """
+            INSERT INTO onboarding_responses
+            (user_id, question_number, question_text, user_response, is_valid, ai_analysis)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            """,
+            user_id, question_number, question_text, user_response, is_valid,
+            json.dumps(ai_analysis) if ai_analysis else None
+        )
+        return response_id
+
+    @staticmethod
+    async def get_user_responses(user_id: int) -> list:
+        """Get all onboarding responses for user"""
+        responses = await db.fetch(
+            """
+            SELECT * FROM onboarding_responses
+            WHERE user_id = $1
+            ORDER BY question_number
+            """,
+            user_id
+        )
+        return [dict(r) for r in responses]
+
+    @staticmethod
+    async def clear_user_responses(user_id: int):
+        """Clear all onboarding responses for user (for retry)"""
+        await db.execute(
+            "DELETE FROM onboarding_responses WHERE user_id = $1",
+            user_id
+        )
+
+    @staticmethod
+    async def count_user_responses(user_id: int) -> int:
+        """Count user's onboarding responses"""
+        count = await db.fetchval(
+            "SELECT COUNT(*) FROM onboarding_responses WHERE user_id = $1",
+            user_id
+        )
+        return count or 0
+
+

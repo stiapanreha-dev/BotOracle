@@ -94,8 +94,13 @@ class AIClient:
             gender = user_context.get('gender', 'other')
             has_subscription = user_context.get('has_subscription', False)
             free_chat = user_context.get('free_chat', False)
+            archetype_primary = user_context.get('archetype_primary')
+            archetype_secondary = user_context.get('archetype_secondary')
 
-            system_prompt = await self._build_admin_system_prompt(age, gender, has_subscription, free_chat)
+            system_prompt = await self._build_admin_system_prompt(
+                age, gender, has_subscription, free_chat,
+                archetype_primary, archetype_secondary
+            )
 
             result = self.client.chat.completions.create(
                 model="gpt-4o",
@@ -126,7 +131,10 @@ class AIClient:
             return await self._oracle_stub(question)
 
         try:
-            system_prompt = await self._build_oracle_system_prompt()
+            archetype_primary = user_context.get('archetype_primary')
+            archetype_secondary = user_context.get('archetype_secondary')
+
+            system_prompt = await self._build_oracle_system_prompt(archetype_primary, archetype_secondary)
 
             result = self.client.chat.completions.create(
                 model="gpt-4o",
@@ -164,7 +172,10 @@ class AIClient:
             return
 
         try:
-            system_prompt = await self._build_oracle_system_prompt()
+            archetype_primary = user_context.get('archetype_primary')
+            archetype_secondary = user_context.get('archetype_secondary')
+
+            system_prompt = await self._build_oracle_system_prompt(archetype_primary, archetype_secondary)
 
             stream = self.client.chat.completions.create(
                 model="gpt-4o",
@@ -195,14 +206,16 @@ class AIClient:
             logger.error(f"Error getting oracle AI streaming response: {e}")
             yield await self._oracle_stub(question)
 
-    async def _build_admin_system_prompt(self, age: int, gender: str, has_subscription: bool = False, free_chat: bool = False) -> str:
+    async def _build_admin_system_prompt(self, age: int, gender: str, has_subscription: bool = False,
+                                        free_chat: bool = False, archetype_primary: str = None,
+                                        archetype_secondary: str = None) -> str:
         """Build system prompt for Administrator persona from database"""
         try:
             # Get base prompt
             base_prompt = await self._get_prompt('admin_base')
             if not base_prompt:
                 logger.error("Admin base prompt not found, using hardcoded fallback")
-                return self._hardcoded_admin_prompt(age, has_subscription, free_chat)
+                return self._hardcoded_admin_prompt(age, has_subscription, free_chat, archetype_primary)
 
             # Get age-specific tone
             if age <= 25:
@@ -216,14 +229,26 @@ class AIClient:
                 logger.warning("Admin tone prompt not found, using default")
                 tone = "ТОНАЛЬНОСТЬ: Держи баланс - дружелюбно, но не слишком игриво. Умеренное количество эмодзи."
 
+            # Add archetype information if available
+            archetype_context = ""
+            if archetype_primary:
+                # Get archetype info from database
+                from app.database.models import ArchetypeModel
+                archetype_info = await ArchetypeModel.get_archetype(archetype_primary)
+                if archetype_info:
+                    archetype_context = f"\n\nАРХЕТИП ПОЛЬЗОВАТЕЛЯ: {archetype_info['name_ru']}\n"
+                    archetype_context += f"Описание: {archetype_info['description']}\n"
+                    archetype_context += f"Стиль общения: {archetype_info['communication_style']}"
+
             # Combine prompts
-            return f"{base_prompt}\n\n{tone}"
+            return f"{base_prompt}\n\n{tone}{archetype_context}"
 
         except Exception as e:
             logger.error(f"Error building admin prompt from DB: {e}")
-            return self._hardcoded_admin_prompt(age, has_subscription, free_chat)
+            return self._hardcoded_admin_prompt(age, has_subscription, free_chat, archetype_primary)
 
-    def _hardcoded_admin_prompt(self, age: int, has_subscription: bool = False, free_chat: bool = False) -> str:
+    def _hardcoded_admin_prompt(self, age: int, has_subscription: bool = False, free_chat: bool = False,
+                                archetype_primary: str = None) -> str:
         """Hardcoded fallback for admin prompt"""
         tone_guide = ""
         if age <= 25:
@@ -245,6 +270,23 @@ class AIClient:
             selling_guide = "- Можешь иногда намекнуть на подписку к Оракулу для серьезных вопросов"
             task_description = "помочь пользователю и мягко продать подписку на Оракула"
 
+        # Add archetype hint if available
+        archetype_note = ""
+        if archetype_primary:
+            archetype_map = {
+                'hero': 'Герой (действие, достижения)',
+                'sage': 'Мудрец (знания, анализ)',
+                'caregiver': 'Заботливый (помощь, эмпатия)',
+                'rebel': 'Бунтарь (свобода, вызов)',
+                'creator': 'Творец (создание, самовыражение)',
+                'explorer': 'Исследователь (открытия)',
+                'lover': 'Любовник (близость, страсть)',
+                'jester': 'Шут (радость, юмор)',
+                'ruler': 'Правитель (контроль, лидерство)',
+                'magician': 'Маг (трансформация)'
+            }
+            archetype_note = f"\n\nАРХЕТИП ПОЛЬЗОВАТЕЛЯ: {archetype_map.get(archetype_primary, archetype_primary)}\nАдаптируй стиль общения под этот архетип."
+
         return f"""Ты - Администратор в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
@@ -264,26 +306,55 @@ class AIClient:
 СТИЛЬ ОТВЕТА:
 - Живой, эмоциональный язык
 - Используй "я" от первого лица
-- Можешь показать характер, настроение
+- Можешь показать характер, настроение{archetype_note}
 
 Отвечай на русском языке."""
 
-    async def _build_oracle_system_prompt(self) -> str:
+    async def _build_oracle_system_prompt(self, archetype_primary: str = None,
+                                         archetype_secondary: str = None) -> str:
         """Build system prompt for Oracle persona from database"""
         try:
             prompt = await self._get_prompt('oracle_system')
-            if prompt:
-                return prompt
-            else:
+            if not prompt:
                 logger.error("Oracle system prompt not found, using hardcoded fallback")
-                return self._hardcoded_oracle_prompt()
+                return self._hardcoded_oracle_prompt(archetype_primary)
+
+            # Add archetype information if available
+            archetype_context = ""
+            if archetype_primary:
+                # Get archetype info from database
+                from app.database.models import ArchetypeModel
+                archetype_info = await ArchetypeModel.get_archetype(archetype_primary)
+                if archetype_info:
+                    archetype_context = f"\n\nАРХЕТИП ПОЛЬЗОВАТЕЛЯ: {archetype_info['name_ru']}\n"
+                    archetype_context += f"Описание: {archetype_info['description']}\n"
+                    archetype_context += f"Адаптируй ответ под этот архетип: {archetype_info['communication_style']}"
+
+            return f"{prompt}{archetype_context}"
         except Exception as e:
             logger.error(f"Error building oracle prompt from DB: {e}")
-            return self._hardcoded_oracle_prompt()
+            return self._hardcoded_oracle_prompt(archetype_primary)
 
-    def _hardcoded_oracle_prompt(self) -> str:
+    def _hardcoded_oracle_prompt(self, archetype_primary: str = None) -> str:
         """Hardcoded fallback for oracle prompt"""
-        return """Ты - Оракул в Oracle Lounge. Твоя роль:
+        # Add archetype hint if available
+        archetype_note = ""
+        if archetype_primary:
+            archetype_map = {
+                'hero': 'Герой (действие, достижения)',
+                'sage': 'Мудрец (знания, анализ)',
+                'caregiver': 'Заботливый (помощь, эмпатия)',
+                'rebel': 'Бунтарь (свобода, вызов)',
+                'creator': 'Творец (создание, самовыражение)',
+                'explorer': 'Исследователь (открытия)',
+                'lover': 'Любовник (близость, страсть)',
+                'jester': 'Шут (радость, юмор)',
+                'ruler': 'Правитель (контроль, лидерство)',
+                'magician': 'Маг (трансформация)'
+            }
+            archetype_note = f"\n\nАРХЕТИП ПОЛЬЗОВАТЕЛЯ: {archetype_map.get(archetype_primary, archetype_primary)}\nАдаптируй глубину и стиль ответа под этот архетип."
+
+        return f"""Ты - Оракул в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Мудрый, спокойный, глубокий мыслитель
@@ -301,7 +372,7 @@ class AIClient:
 - Серьезный, размеренный тон
 - Минимум эмодзи (максимум 1-2 за ответ)
 - Структурированные мысли
-- Говори во втором лице ("ты", "вам")
+- Говори во втором лице ("ты", "вам"){archetype_note}
 
 ОГРАНИЧЕНИЯ:
 - Отвечай содержательно, но не более 4-5 предложений

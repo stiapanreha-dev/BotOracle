@@ -82,7 +82,13 @@ async def daily_message_handler(message: types.Message):
         await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
         # Generate message using Administrator AI
-        user_context = {'age': age, 'gender': gender, 'user_id': user['id']}
+        user_context = {
+            'age': age,
+            'gender': gender,
+            'user_id': user['id'],
+            'archetype_primary': user.get('archetype_primary'),
+            'archetype_secondary': user.get('archetype_secondary')
+        }
         ai_message = await call_admin_ai(prompt, user_context)
 
         # Send generated message
@@ -286,6 +292,7 @@ async def question_handler(message: types.Message, state: FSMContext):
 
         # Check if user is in Oracle question state (button was pressed)
         is_oracle_question = current_state == OracleQuestionStates.waiting_for_question.state
+        is_clarification_answer = current_state == OracleQuestionStates.waiting_for_clarification.state
         is_admin_question = current_state == AdminQuestionStates.waiting_for_question.state
 
         if is_admin_question and not subscription:
@@ -310,7 +317,9 @@ async def question_handler(message: types.Message, state: FSMContext):
                 'gender': user.get('gender'),
                 'has_subscription': False,
                 'free_chat': False,
-                'user_id': user['id']
+                'user_id': user['id'],
+                'archetype_primary': user.get('archetype_primary'),
+                'archetype_secondary': user.get('archetype_secondary')
             }
             answer = await call_admin_ai(question, user_context)
 
@@ -343,38 +352,130 @@ async def question_handler(message: types.Message, state: FSMContext):
             await state.clear()
 
         elif is_oracle_question and subscription:
-            # ORACLE MODE - subscription active
+            # ORACLE MODE - subscription active, FIRST QUESTION (generate clarifying questions)
             oracle_used = await OracleQuestionModel.count_today_questions(user['id'], 'SUB')
 
             if oracle_used >= 10:
                 # Daily Oracle limit reached
                 limit_message = persona.format_oracle_limit()
                 await message.answer(limit_message)
+                await state.clear()
                 return
 
-            # Call Oracle AI with streaming (wise, profound response)
-            user_context = {'age': user.get('age'), 'gender': user.get('gender'), 'user_id': user['id']}
+            # Get user archetype for personalized clarifying questions
+            archetype_code = user.get('archetype_primary', 'hero')
 
-            # Send initial message
+            # Generate clarifying questions
+            from app.services.smart_messages import generate_clarifying_questions
+
+            await message.answer("Анализирую вопрос... 🤔")
+
+            clarifying_data = await generate_clarifying_questions(question, archetype_code)
+            questions = clarifying_data.get('questions', [])
+            intro = clarifying_data.get('intro', '')
+
+            if not questions:
+                # No clarifying questions generated, answer directly (fallback)
+                user_context = {
+                    'age': user.get('age'),
+                    'gender': user.get('gender'),
+                    'user_id': user['id'],
+                    'archetype_primary': user.get('archetype_primary'),
+                    'archetype_secondary': user.get('archetype_secondary')
+                }
+
+                oracle_msg = await message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
+
+                full_answer = ""
+                display_text = "🔮 **Оракул отвечает:**\n\n"
+                last_update = asyncio.get_event_loop().time()
+
+                async for chunk in call_oracle_ai_stream(question, user_context):
+                    full_answer += chunk
+                    display_text_with_answer = display_text + full_answer
+
+                    current_time = asyncio.get_event_loop().time()
+                    if current_time - last_update >= 0.5:
+                        try:
+                            await oracle_msg.edit_text(display_text_with_answer, parse_mode="Markdown")
+                            last_update = current_time
+                        except Exception:
+                            pass
+
+                remaining = 10 - oracle_used - 1
+                final_text = display_text + full_answer
+
+                if remaining > 0:
+                    final_text += f"\n\n_Осталось {remaining} вопрос{'ов' if remaining > 1 else ''} на сегодня._"
+                else:
+                    final_text += f"\n\n_Лимит вопросов на сегодня исчерпан. Завтра будет новый день._"
+
+                await oracle_msg.edit_text(final_text, parse_mode="Markdown")
+
+                await OracleQuestionModel.save_question(
+                    user['id'], question, full_answer, source='SUB'
+                )
+
+                await state.clear()
+                return
+
+            # Send clarifying questions
+            questions_text = "\n\n".join([f"• {q}" for q in questions])
+            clarifying_message = (intro + "\n\n" if intro else "") + questions_text
+
+            await message.answer(clarifying_message)
+            await message.answer("Напиши свой ответ:")
+
+            # Save original question and clarifying data to state
+            await state.update_data(
+                original_question=question,
+                clarifying_questions=questions,
+                oracle_used=oracle_used
+            )
+
+            # Set state to waiting for clarification answers
+            await state.set_state(OracleQuestionStates.waiting_for_clarification)
+
+        elif is_clarification_answer and subscription:
+            # ORACLE MODE - receiving clarification answers, generate final response
+            data = await state.get_data()
+            original_question = data.get('original_question', question)
+            clarifying_questions = data.get('clarifying_questions', [])
+            oracle_used = data.get('oracle_used', 0)
+
+            # Build enriched context with clarifications
+            context_addition = f"\n\nДополнительный контекст:\n"
+            for i, q in enumerate(clarifying_questions, 1):
+                context_addition += f"{i}. На вопрос '{q}': {question if i == 1 else ''}\n"
+
+            enriched_question = f"{original_question}{context_addition}\nОтвет пользователя на уточняющие вопросы: {question}"
+
+            # Call Oracle AI with enriched context
+            user_context = {
+                'age': user.get('age'),
+                'gender': user.get('gender'),
+                'user_id': user['id'],
+                'archetype_primary': user.get('archetype_primary'),
+                'archetype_secondary': user.get('archetype_secondary')
+            }
+
             oracle_msg = await message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
 
-            # Stream the response
             full_answer = ""
             display_text = "🔮 **Оракул отвечает:**\n\n"
             last_update = asyncio.get_event_loop().time()
 
-            async for chunk in call_oracle_ai_stream(question, user_context):
+            async for chunk in call_oracle_ai_stream(enriched_question, user_context):
                 full_answer += chunk
                 display_text_with_answer = display_text + full_answer
 
-                # Update message every 0.5 seconds to avoid rate limits
                 current_time = asyncio.get_event_loop().time()
                 if current_time - last_update >= 0.5:
                     try:
                         await oracle_msg.edit_text(display_text_with_answer, parse_mode="Markdown")
                         last_update = current_time
                     except Exception:
-                        pass  # Ignore errors if message is the same
+                        pass
 
             # Final update with counter
             remaining = 10 - oracle_used - 1
@@ -387,9 +488,9 @@ async def question_handler(message: types.Message, state: FSMContext):
 
             await oracle_msg.edit_text(final_text, parse_mode="Markdown")
 
-            # Save question and answer
+            # Save question with full context
             await OracleQuestionModel.save_question(
-                user['id'], question, full_answer, source='SUB'
+                user['id'], original_question, full_answer, source='SUB'
             )
 
             # Clear FSM state after Oracle response
@@ -407,7 +508,9 @@ async def question_handler(message: types.Message, state: FSMContext):
                 'gender': user.get('gender'),
                 'has_subscription': subscription is not None,
                 'free_chat': True,  # Free chat - no counter mentions
-                'user_id': user['id']
+                'user_id': user['id'],
+                'archetype_primary': user.get('archetype_primary'),
+                'archetype_secondary': user.get('archetype_secondary')
             }
             answer = await call_admin_ai(question, user_context)
 

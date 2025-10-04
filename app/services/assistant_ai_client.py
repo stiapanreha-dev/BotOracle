@@ -233,9 +233,14 @@ class AssistantAIClient:
             gender = user_context.get('gender', 'other')
             has_subscription = user_context.get('has_subscription', False)
             free_chat = user_context.get('free_chat', False)
+            archetype_primary = user_context.get('archetype_primary')
+            archetype_secondary = user_context.get('archetype_secondary')
 
             # Build contextualized message
-            context_prefix = self._build_admin_context(age, gender, has_subscription, free_chat)
+            context_prefix = await self._build_admin_context(
+                age, gender, has_subscription, free_chat,
+                archetype_primary, archetype_secondary
+            )
             full_message = f"{context_prefix}\n\nВопрос пользователя: {question}"
 
             # Add message to thread
@@ -359,7 +364,9 @@ class AssistantAIClient:
 
         raise TimeoutError(f"Run {run_id} did not complete within {timeout} seconds")
 
-    def _build_admin_context(self, age: int, gender: str, has_subscription: bool, free_chat: bool = False) -> str:
+    async def _build_admin_context(self, age: int, gender: str, has_subscription: bool,
+                                   free_chat: bool = False, archetype_primary: str = None,
+                                   archetype_secondary: str = None) -> str:
         """Build context information for Admin"""
         tone = ""
         if age <= 25:
@@ -377,7 +384,15 @@ class AssistantAIClient:
         else:
             selling = "Можешь иногда намекнуть на подписку к Оракулу для серьезных вопросов."
 
-        return f"КОНТЕКСТ: Пользователь {age} лет, пол: {gender}. {tone} {selling}"
+        # Add archetype information if available
+        archetype_info_text = ""
+        if archetype_primary:
+            from app.database.models import ArchetypeModel
+            archetype_info = await ArchetypeModel.get_archetype(archetype_primary)
+            if archetype_info:
+                archetype_info_text = f" Архетип: {archetype_info['name_ru']}. {archetype_info['communication_style']}"
+
+        return f"КОНТЕКСТ: Пользователь {age} лет, пол: {gender}.{archetype_info_text} {tone} {selling}"
 
     async def _admin_stub(self, question: str) -> str:
         """Fallback stub for Administrator"""
