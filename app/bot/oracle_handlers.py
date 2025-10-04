@@ -15,7 +15,7 @@ from app.database.models import (
 )
 from app.services.persona import persona_factory, get_admin_response
 from app.bot.keyboards import get_main_menu, get_subscription_menu
-from app.bot.states import OnboardingStates, OracleQuestionStates, AdminQuestionStates
+from app.bot.states import OnboardingStates, OracleQuestionStates
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -234,7 +234,8 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
                 )
                 return
 
-            await state.set_state(AdminQuestionStates.waiting_for_question)
+            # Set FSM state to waiting for Oracle question (free questions still go to Oracle)
+            await state.set_state(OracleQuestionStates.waiting_for_question)
 
             await message.answer(
                 persona.wrap(f"задавай свой вопрос! 💬\n\n"
@@ -307,66 +308,81 @@ async def question_handler(message: types.Message, state: FSMContext):
         # Check if user is in Oracle question state (button was pressed)
         is_oracle_question = current_state == OracleQuestionStates.waiting_for_question.state
         is_clarification_answer = current_state == OracleQuestionStates.waiting_for_clarification.state
-        is_admin_question = current_state == AdminQuestionStates.waiting_for_question.state
 
-        if is_admin_question and not subscription:
-            # ADMIN BUTTON MODE - non-subscriber asking via Oracle button (USES counter)
-            free_left = user.get('free_questions_left', 0)
+        if is_oracle_question:
+            # ORACLE MODE - Answer from Oracle (with or without subscription)
 
-            if free_left <= 0:
-                # No free questions left
-                exhausted_message = persona.format_free_exhausted()
-                await message.answer(
-                    f"{exhausted_message}\n\n💎 Получи подписку:",
-                    reply_markup=get_subscription_menu()
+            if not subscription:
+                # FREE USERS: Use free questions counter (no clarifying questions)
+                free_left = user.get('free_questions_left', 0)
+
+                if free_left <= 0:
+                    exhausted_message = persona.format_free_exhausted()
+                    await message.answer(
+                        f"{exhausted_message}\n\n💎 Получи подписку:",
+                        reply_markup=get_subscription_menu()
+                    )
+                    await state.clear()
+                    return
+
+                # Direct answer from Oracle (no clarifying questions for free users)
+                user_context = {
+                    'age': user.get('age'),
+                    'gender': user.get('gender'),
+                    'user_id': user['id'],
+                    'archetype_primary': user.get('archetype_primary'),
+                    'archetype_secondary': user.get('archetype_secondary')
+                }
+
+                oracle_msg = await message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
+
+                full_answer = ""
+                display_text = "🔮 **Оракул отвечает:**\n\n"
+                last_update = asyncio.get_event_loop().time()
+
+                async for chunk in call_oracle_ai_stream(question, user_context):
+                    full_answer += chunk
+                    display_text_with_answer = display_text + full_answer
+
+                    current_time = asyncio.get_event_loop().time()
+                    if current_time - last_update >= 0.5:
+                        try:
+                            await oracle_msg.edit_text(display_text_with_answer, parse_mode="Markdown")
+                            last_update = current_time
+                        except Exception:
+                            pass
+
+                # Use one free question AFTER successful AI response
+                success = await UserModel.use_free_question(user['id'])
+                if not success:
+                    await message.answer(persona.wrap("упс, что-то пошло не так. попробуй ещё раз"))
+                    await state.clear()
+                    return
+
+                # Save question (track as ADMIN_BUTTON for analytics - free questions)
+                await OracleQuestionModel.save_question(
+                    user['id'], question, full_answer, source='ADMIN_BUTTON'
                 )
+
+                remaining = free_left - 1
+                final_text = display_text + full_answer
+
+                if remaining > 0:
+                    response = persona.format_free_remaining(remaining)
+                    final_text += f"\n\n{response}"
+                else:
+                    response = persona.format_free_exhausted()
+                    final_text += f"\n\n{response}\n\n💎 Получи подписку:"
+
+                await oracle_msg.edit_text(final_text, parse_mode="Markdown")
+
+                if remaining <= 0:
+                    await message.answer("💎", reply_markup=get_subscription_menu())
+
                 await state.clear()
                 return
 
-            # Show typing status while generating
-            await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
-
-            user_context = {
-                'age': user.get('age'),
-                'gender': user.get('gender'),
-                'has_subscription': False,
-                'free_chat': False,
-                'user_id': user['id'],
-                'archetype_primary': user.get('archetype_primary'),
-                'archetype_secondary': user.get('archetype_secondary')
-            }
-            answer = await call_admin_ai(question, user_context)
-
-            # Use one free question AFTER successful AI response
-            success = await UserModel.use_free_question(user['id'])
-            if not success:
-                await message.answer(persona.wrap("упс, что-то пошло не так. попробуй ещё раз"))
-                await state.clear()
-                return
-
-            # Save question (track as ADMIN_BUTTON for analytics)
-            await OracleQuestionModel.save_question(
-                user['id'], question, answer, source='ADMIN_BUTTON'
-            )
-
-            remaining = free_left - 1
-            if remaining > 0:
-                response = persona.format_free_remaining(remaining)
-                full_response = f"{answer}\n\n{response}"
-            else:
-                response = persona.format_free_exhausted()
-                full_response = f"{answer}\n\n{response}\n\n💎 Получи подписку:"
-                await message.answer(full_response, reply_markup=get_subscription_menu())
-                await state.clear()
-                return
-
-            await message.answer(full_response)
-
-            # Clear FSM state after response
-            await state.clear()
-
-        elif is_oracle_question and subscription:
-            # ORACLE MODE - subscription active, FIRST QUESTION (generate clarifying questions)
+            # SUBSCRIBERS: Check daily Oracle limit
             oracle_used = await OracleQuestionModel.count_today_questions(user['id'], 'SUB')
 
             if oracle_used >= 10:
