@@ -93,8 +93,8 @@ async def daily_message_handler(message: types.Message):
         }
         ai_message = await call_admin_ai(prompt, user_context)
 
-        # Send generated message
-        await message.answer(persona.wrap(ai_message))
+        # Send generated message with Administrator emoji
+        await message.answer(f"💬 {persona.wrap(ai_message)}")
 
         # Mark as sent (AI-generated, no template ID needed)
         await DailyMessageModel.mark_sent(user['id'])
@@ -549,8 +549,8 @@ async def question_handler(message: types.Message, state: FSMContext):
                 user['id'], question, answer, source='CHAT_FREE'
             )
 
-            # Simple response without counter info
-            await message.answer(answer)
+            # Simple response with Administrator emoji
+            await message.answer(f"💬 {answer}")
 
         await UserModel.update_last_seen(user['id'])
 
