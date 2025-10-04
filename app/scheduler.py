@@ -3,6 +3,7 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import date, datetime
 import os
 import logging
+import pytz
 
 from app.database.models import DailyMessageModel, UserModel, EventModel, MetricsModel
 from app.database.connection import db
@@ -71,13 +72,13 @@ class SchedulerService:
             logger.info("Scheduler stopped")
 
     async def send_daily_messages_by_user_time(self):
-        """Send daily messages to users based on their individual time settings"""
+        """Send daily messages to users based on their individual time settings with timezone support"""
         from datetime import time
-        current_time = datetime.now().time()
-        current_hour = current_time.hour
-        current_minute = current_time.minute
 
-        logger.info(f"Checking for users to send daily messages at {current_hour:02d}:{current_minute:02d}")
+        # Get current UTC time
+        utc_now = datetime.now(pytz.UTC)
+
+        logger.info(f"Checking for users to send daily messages at {utc_now} UTC")
 
         try:
             # Get random daily message
@@ -86,32 +87,59 @@ class SchedulerService:
                 logger.warning("No daily messages available")
                 return
 
-            # Find users who should receive message at this time
+            # Find all users who might need messages (haven't received today)
             users = await db.fetch(
                 """
-                SELECT u.id, u.tg_user_id, u.daily_message_time
+                SELECT u.id, u.tg_user_id, u.daily_message_time, u.tz
                 FROM users u
                 WHERE u.is_blocked = false
                 AND u.daily_message_time IS NOT NULL
-                AND EXTRACT(HOUR FROM u.daily_message_time) = $1
-                AND EXTRACT(MINUTE FROM u.daily_message_time) = $2
                 AND NOT EXISTS (
                     SELECT 1 FROM daily_sent ds
                     WHERE ds.user_id = u.id AND ds.sent_date = CURRENT_DATE
                 )
-                """,
-                current_hour, current_minute
+                """
             )
 
-            if not users:
+            # Filter users by timezone-aware time matching
+            users_to_send = []
+            for user in users:
+                try:
+                    # Get user's timezone (default to UTC if invalid)
+                    user_tz_name = user['tz'] or 'UTC'
+                    try:
+                        user_tz = pytz.timezone(user_tz_name)
+                    except pytz.UnknownTimeZoneError:
+                        logger.warning(f"Unknown timezone '{user_tz_name}' for user {user['tg_user_id']}, using UTC")
+                        user_tz = pytz.UTC
+
+                    # Convert current UTC time to user's timezone
+                    user_local_time = utc_now.astimezone(user_tz)
+                    user_hour = user_local_time.hour
+                    user_minute = user_local_time.minute
+
+                    # Get user's daily message time
+                    daily_msg_time = user['daily_message_time']
+                    scheduled_hour = daily_msg_time.hour
+                    scheduled_minute = daily_msg_time.minute
+
+                    # Check if it's time to send
+                    if user_hour == scheduled_hour and user_minute == scheduled_minute:
+                        users_to_send.append(user)
+
+                except Exception as e:
+                    logger.error(f"Error processing timezone for user {user['tg_user_id']}: {e}")
+                    continue
+
+            if not users_to_send:
                 return
 
-            logger.info(f"Found {len(users)} users to send messages to at {current_hour:02d}:{current_minute:02d}")
+            logger.info(f"Found {len(users_to_send)} users to send messages to (timezone-aware)")
 
             sent_count = 0
             blocked_count = 0
 
-            for user in users:
+            for user in users_to_send:
                 try:
                     # Send message
                     text = f"📨 **Сообщение дня:**\n\n{daily_message['text']}"
@@ -147,10 +175,10 @@ class SchedulerService:
                         logger.error(f"Failed to send daily message to user {user['tg_user_id']}: {e}")
 
             if sent_count > 0:
-                logger.info(f"Daily messages sent at {current_hour:02d}:{current_minute:02d}: {sent_count} sent, {blocked_count} blocked")
+                logger.info(f"Daily messages sent (timezone-aware): {sent_count} sent, {blocked_count} blocked")
 
         except Exception as e:
-            logger.error(f"Error during daily message distribution by user time: {e}")
+            logger.error(f"Error during timezone-aware daily message distribution: {e}")
 
     async def send_daily_messages(self):
         logger.info("Starting daily message distribution")
