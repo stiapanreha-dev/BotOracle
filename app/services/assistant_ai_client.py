@@ -14,6 +14,21 @@ from app.database.connection import db
 
 logger = logging.getLogger(__name__)
 
+# Separate logger for prompt tracking
+prompt_logger = logging.getLogger('prompt_tracker')
+prompt_logger.setLevel(logging.INFO)
+
+# Create file handler for prompts (if not already exists)
+if not prompt_logger.handlers:
+    prompt_handler = logging.FileHandler('/app/logs/prompts.log')
+    prompt_handler.setLevel(logging.INFO)
+    prompt_formatter = logging.Formatter(
+        '%(asctime)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    prompt_handler.setFormatter(prompt_formatter)
+    prompt_logger.addHandler(prompt_handler)
+
 
 class AssistantAIClient:
     """AI client using OpenAI Assistants API for stateful conversations"""
@@ -189,11 +204,21 @@ class AssistantAIClient:
         if db_prompt:
             logger.info("Loaded Admin instructions from database")
             # Add length constraint to DB prompt
-            return f"{db_prompt}\n\nОГРАНИЧЕНИЯ:\n- Отвечай ОЧЕНЬ кратко: 1-2 предложения, максимум 3\n- Твой ответ должен быть логически законченным, но коротким\n- ВАЖНО: Формулируй ответ так, чтобы он был коротким И законченным, без обрывов мысли"
+            full_prompt = f"{db_prompt}\n\nОГРАНИЧЕНИЯ:\n- Отвечай ОЧЕНЬ кратко: 1-2 предложения, максимум 3\n- Твой ответ должен быть логически законченным, но коротким\n- ВАЖНО: Формулируй ответ так, чтобы он был коротким И законченным, без обрывов мысли"
+
+            # Log to prompts file
+            prompt_logger.info("="*80)
+            prompt_logger.info("ADMIN INSTRUCTIONS - LOADED FROM DATABASE (key: admin_base)")
+            prompt_logger.info("-"*80)
+            prompt_logger.info(full_prompt)
+            prompt_logger.info("="*80 + "\n")
+
+            return full_prompt
 
         # Fallback to hardcoded prompt
         logger.warning("Using hardcoded Admin instructions (DB prompt not found)")
-        return """Ты - Администратор в Oracle Lounge. Твоя роль:
+
+        fallback_prompt = """Ты - Администратор в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Эмоциональная, человечная, живая
@@ -217,6 +242,15 @@ class AssistantAIClient:
 
 ВАЖНО: Учитывай предыдущий контекст беседы с пользователем для более персонализированных ответов."""
 
+        # Log fallback prompt
+        prompt_logger.info("="*80)
+        prompt_logger.info("ADMIN INSTRUCTIONS - USING HARDCODED FALLBACK (admin_base not found in DB)")
+        prompt_logger.info("-"*80)
+        prompt_logger.info(fallback_prompt)
+        prompt_logger.info("="*80 + "\n")
+
+        return fallback_prompt
+
     async def _get_oracle_instructions(self) -> str:
         """Get base instructions for Oracle assistant from DB or fallback"""
         # Try to load from database first
@@ -224,11 +258,20 @@ class AssistantAIClient:
 
         if db_prompt:
             logger.info("Loaded Oracle instructions from database")
+
+            # Log to prompts file
+            prompt_logger.info("="*80)
+            prompt_logger.info("ORACLE INSTRUCTIONS - LOADED FROM DATABASE (key: oracle_system)")
+            prompt_logger.info("-"*80)
+            prompt_logger.info(db_prompt)
+            prompt_logger.info("="*80 + "\n")
+
             return db_prompt
 
         # Fallback to hardcoded prompt
         logger.warning("Using hardcoded Oracle instructions (DB prompt not found)")
-        return """Ты - Оракул в Oracle Lounge. Твоя роль:
+
+        fallback_prompt = """Ты - Оракул в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Мудрый, спокойный, глубокий мыслитель
@@ -256,6 +299,15 @@ class AssistantAIClient:
 Отвечай на русском языке.
 
 ВАЖНО: Помни предыдущий контекст беседы для глубоких, последовательных ответов."""
+
+        # Log fallback prompt
+        prompt_logger.info("="*80)
+        prompt_logger.info("ORACLE INSTRUCTIONS - USING HARDCODED FALLBACK (oracle_system not found in DB)")
+        prompt_logger.info("-"*80)
+        prompt_logger.info(fallback_prompt)
+        prompt_logger.info("="*80 + "\n")
+
+        return fallback_prompt
 
     async def _get_or_create_thread(self, user_id: int, persona: str) -> Optional[str]:
         """Get existing thread_id or create new thread for user"""
@@ -369,6 +421,23 @@ class AssistantAIClient:
             )
             full_message = f"{context_prefix}\n\nВопрос пользователя: {question}"
 
+            # Log the question and context
+            prompt_logger.info("="*80)
+            prompt_logger.info(f"ADMIN QUESTION - User ID: {user_id}")
+            prompt_logger.info("-"*80)
+            prompt_logger.info(f"Question: {question}")
+            prompt_logger.info(f"User Context:")
+            prompt_logger.info(f"  - Age: {age}")
+            prompt_logger.info(f"  - Gender: {gender}")
+            prompt_logger.info(f"  - Archetype Primary: {archetype_primary}")
+            prompt_logger.info(f"  - Archetype Secondary: {archetype_secondary}")
+            prompt_logger.info(f"  - Has Subscription: {has_subscription}")
+            prompt_logger.info(f"  - Free Chat: {free_chat}")
+            prompt_logger.info("-"*80)
+            prompt_logger.info(f"Full message sent to AI:")
+            prompt_logger.info(full_message)
+            prompt_logger.info("="*80 + "\n")
+
             # Add message to thread
             self.client.beta.threads.messages.create(
                 thread_id=thread_id,
@@ -436,11 +505,37 @@ class AssistantAIClient:
             if not thread_id:
                 return await self._oracle_stub(question)
 
+            # Extract user context for logging
+            age = user_context.get('age')
+            gender = user_context.get('gender')
+            archetype_primary = user_context.get('archetype_primary')
+            archetype_secondary = user_context.get('archetype_secondary')
+            has_subscription = user_context.get('has_subscription', False)
+
+            # Build message
+            oracle_message = f"Вопрос для размышления: {question}"
+
+            # Log the question and context
+            prompt_logger.info("="*80)
+            prompt_logger.info(f"ORACLE QUESTION - User ID: {user_id}")
+            prompt_logger.info("-"*80)
+            prompt_logger.info(f"Question: {question}")
+            prompt_logger.info(f"User Context:")
+            prompt_logger.info(f"  - Age: {age}")
+            prompt_logger.info(f"  - Gender: {gender}")
+            prompt_logger.info(f"  - Archetype Primary: {archetype_primary}")
+            prompt_logger.info(f"  - Archetype Secondary: {archetype_secondary}")
+            prompt_logger.info(f"  - Has Subscription: {has_subscription}")
+            prompt_logger.info("-"*80)
+            prompt_logger.info(f"Full message sent to AI:")
+            prompt_logger.info(oracle_message)
+            prompt_logger.info("="*80 + "\n")
+
             # Add message to thread
             self.client.beta.threads.messages.create(
                 thread_id=thread_id,
                 role="user",
-                content=f"Вопрос для размышления: {question}"
+                content=oracle_message
             )
 
             # Run assistant
