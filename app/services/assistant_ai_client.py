@@ -212,6 +212,44 @@ class AssistantAIClient:
             logger.error(f"Error getting/creating thread: {e}")
             return None
 
+    async def _sync_conversation_to_thread(self, user_id: int, target_persona: str,
+                                          source_persona: str, question: str, response: str):
+        """Sync conversation from one persona to another's thread for context sharing"""
+        if not self.client:
+            return
+
+        try:
+            # Get or create target thread
+            target_thread_id = await self._get_or_create_thread(user_id, target_persona)
+            if not target_thread_id:
+                return
+
+            # Format context message
+            persona_names = {
+                'admin': 'Администратором',
+                'oracle': 'Оракулом'
+            }
+            source_name = persona_names.get(source_persona, source_persona)
+
+            context_message = (
+                f"[Контекст из диалога с {source_name}]\n"
+                f"Пользователь спросил: {question}\n"
+                f"Ответ {source_name}: {response}"
+            )
+
+            # Add context to target thread
+            self.client.beta.threads.messages.create(
+                thread_id=target_thread_id,
+                role="user",
+                content=context_message
+            )
+
+            logger.debug(f"Synced conversation from {source_persona} to {target_persona} thread for user {user_id}")
+
+        except Exception as e:
+            logger.warning(f"Failed to sync conversation to {target_persona} thread: {e}")
+            # Don't fail the main request if sync fails
+
     async def get_admin_response(self, question: str, user_context: Dict[str, Any]) -> str:
         """Generate Administrator persona response with context"""
         if not self.client or not self.admin_assistant_id:
@@ -264,6 +302,16 @@ class AssistantAIClient:
                 response = response[:297] + "..."
 
             logger.info(f"Admin assistant response: {len(response)} chars")
+
+            # Sync conversation to Oracle's thread for context sharing
+            await self._sync_conversation_to_thread(
+                user_id=user_id,
+                target_persona='oracle',
+                source_persona='admin',
+                question=question,
+                response=response
+            )
+
             return response
 
         except Exception as e:
@@ -312,6 +360,16 @@ class AssistantAIClient:
                     response = truncated + "..."
 
             logger.info(f"Oracle assistant response: {len(response)} chars")
+
+            # Sync conversation to Admin's thread for context sharing
+            await self._sync_conversation_to_thread(
+                user_id=user_id,
+                target_persona='admin',
+                source_persona='oracle',
+                question=question,
+                response=response
+            )
+
             return response
 
         except Exception as e:
