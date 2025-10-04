@@ -1,5 +1,5 @@
 """
-AI Client Service - GPT-4o integration for Bot Oracle
+AI Client Service - GPT-4o integration for Oracle Lounge
 Handles both Administrator and Oracle persona responses
 """
 import os
@@ -245,7 +245,7 @@ class AIClient:
             selling_guide = "- Можешь иногда намекнуть на подписку к Оракулу для серьезных вопросов"
             task_description = "помочь пользователю и мягко продать подписку на Оракула"
 
-        return f"""Ты - Администратор в Bot Oracle. Твоя роль:
+        return f"""Ты - Администратор в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Эмоциональная, человечная, живая
@@ -283,7 +283,7 @@ class AIClient:
 
     def _hardcoded_oracle_prompt(self) -> str:
         """Hardcoded fallback for oracle prompt"""
-        return """Ты - Оракул в Bot Oracle. Твоя роль:
+        return """Ты - Оракул в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Мудрый, спокойный, глубокий мыслитель

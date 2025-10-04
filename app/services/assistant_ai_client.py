@@ -71,7 +71,7 @@ class AssistantAIClient:
 
             # Create new assistant
             assistant = self.client.beta.assistants.create(
-                name="Bot Oracle - Administrator",
+                name="Oracle Lounge - Administrator",
                 model="gpt-4o",
                 instructions=self._get_admin_instructions(),
                 temperature=0.8
@@ -104,7 +104,7 @@ class AssistantAIClient:
 
             # Create new assistant
             assistant = self.client.beta.assistants.create(
-                name="Bot Oracle - Oracle",
+                name="Oracle Lounge - Oracle",
                 model="gpt-4o",
                 instructions=self._get_oracle_instructions(),
                 temperature=0.7
@@ -119,7 +119,7 @@ class AssistantAIClient:
 
     def _get_admin_instructions(self) -> str:
         """Get base instructions for Administrator assistant"""
-        return """Ты - Администратор в Bot Oracle. Твоя роль:
+        return """Ты - Администратор в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Эмоциональная, человечная, живая
@@ -143,7 +143,7 @@ class AssistantAIClient:
 
     def _get_oracle_instructions(self) -> str:
         """Get base instructions for Oracle assistant"""
-        return """Ты - Оракул в Bot Oracle. Твоя роль:
+        return """Ты - Оракул в Oracle Lounge. Твоя роль:
 
 ЛИЧНОСТЬ:
 - Мудрый, спокойный, глубокий мыслитель

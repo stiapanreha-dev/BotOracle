@@ -1,4 +1,4 @@
-# Bot Oracle - Telegram Bot with Dual Persona AI
+# Oracle Lounge - Telegram Bot with Dual Persona AI
 
 Интеллектуальный Telegram-бот с двухперсонной системой (Администратор + Оракул), GPT-4 интеграцией, CRM-системой и персонализированным общением.
 

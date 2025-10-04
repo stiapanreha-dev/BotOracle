@@ -1,5 +1,5 @@
 """
-Onboarding handlers for Bot Oracle
+Onboarding handlers for Oracle Lounge
 Handles user questionnaire: age and gender for personalization
 """
 from aiogram import Router, types, F
@@ -45,7 +45,7 @@ async def start_command(message: types.Message, state: FSMContext):
 
         # Start onboarding questionnaire
         await message.answer(
-            "👋 Привет! Я Bot Oracle — твой персональный помощник.\n\n"
+            "👋 Привет! Добро пожаловать в Oracle Lounge — пространство для глубоких разговоров.\n\n"
             "Чтобы общаться было комфортнее, давай познакомимся!\n\n"
             "Сколько тебе лет? (напиши число)"
         )

@@ -1,5 +1,5 @@
 """
-Bot Oracle Main Application
+Oracle Lounge Main Application
 Runs both Telegram bot and FastAPI web server with enhanced CRM functionality
 """
 import asyncio
@@ -44,8 +44,8 @@ BASE_URL = os.getenv("BASE_URL", "https://consultant.sh3.su")
 
 # Create FastAPI app
 app = FastAPI(
-    title="Bot Oracle API",
-    description="API for Bot Oracle - Telegram bot with Administrator and Oracle personas",
+    title="Oracle Lounge API",
+    description="API for Oracle Lounge - Telegram bot with Administrator and Oracle personas",
     version="2.0.0"
 )
 
@@ -82,7 +82,7 @@ async def startup_event():
     global bot_instance, dp_instance
 
     try:
-        logger.info("🤖 Bot Oracle starting...")
+        logger.info("🤖 Oracle Lounge starting...")
         logger.info("🎭 Two-persona system: Administrator + Oracle")
         logger.info("🎯 CRM proactive engagement enabled")
         logger.info("👥 Personalized interactions based on user demographics")
@@ -102,7 +102,7 @@ async def startup_event():
         await bot_instance.set_webhook(webhook_url)
 
         logger.info(f"Webhook set to {webhook_url}")
-        logger.info("Bot Oracle startup completed!")
+        logger.info("Oracle Lounge startup completed!")
 
     except Exception as e:
         logger.error(f"Error during startup: {e}")
@@ -114,13 +114,13 @@ async def shutdown_event():
     global bot_instance
 
     try:
-        logger.info("Bot Oracle shutting down...")
+        logger.info("Oracle Lounge shutting down...")
 
         if bot_instance:
             await bot_instance.delete_webhook()
             await bot_instance.session.close()
 
-        logger.info("Bot Oracle shutdown completed")
+        logger.info("Oracle Lounge shutdown completed")
 
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
@@ -166,7 +166,7 @@ async def get_readme():
         <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Bot Oracle - Documentation</title>
+            <title>Oracle Lounge - Documentation</title>
             <style>
                 body {{
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -282,7 +282,7 @@ async def root():
     """Health check endpoint"""
     return {
         "status": "running",
-        "service": "Bot Oracle",
+        "service": "Oracle Lounge",
         "version": "2.0.0"
     }
 

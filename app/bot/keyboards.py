@@ -1,5 +1,5 @@
 """
-Keyboards for Bot Oracle
+Keyboards for Oracle Lounge
 """
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 

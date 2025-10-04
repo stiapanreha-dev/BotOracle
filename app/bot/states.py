@@ -1,5 +1,5 @@
 """
-FSM States for Bot Oracle onboarding questionnaire and Oracle questions
+FSM States for Oracle Lounge onboarding questionnaire and Oracle questions
 """
 from aiogram.fsm.state import State, StatesGroup
 
