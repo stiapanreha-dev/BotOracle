@@ -34,8 +34,10 @@ async def daily_message_handler(message: types.Message):
             await message.answer("Напиши /start чтобы начать!")
             return
 
-        # Check if user completed onboarding
-        if not user.get('age') or not user.get('gender'):
+        # Check if user completed onboarding (old: age/gender, new: archetype-based)
+        has_old_onboarding = user.get('age') and user.get('gender')
+        has_new_onboarding = user.get('onboarding_completed') or user.get('archetype_primary')
+        if not (has_old_onboarding or has_new_onboarding):
             await message.answer("Сначала давай познакомимся! Напиши /start")
             return
 
@@ -116,8 +118,10 @@ async def subscription_menu_handler(message: types.Message):
             await message.answer("Напиши /start чтобы начать!")
             return
 
-        # Check if user completed onboarding
-        if not user.get('age') or not user.get('gender'):
+        # Check if user completed onboarding (old: age/gender, new: archetype-based)
+        has_old_onboarding = user.get('age') and user.get('gender')
+        has_new_onboarding = user.get('onboarding_completed') or user.get('archetype_primary')
+        if not (has_old_onboarding or has_new_onboarding):
             await message.answer("Сначала давай познакомимся! Напиши /start")
             return
 
@@ -206,8 +210,10 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
             await message.answer("Напиши /start чтобы начать!")
             return
 
-        # Check if user completed onboarding
-        if not user.get('age') or not user.get('gender'):
+        # Check if user completed onboarding (old: age/gender, new: archetype-based)
+        has_old_onboarding = user.get('age') and user.get('gender')
+        has_new_onboarding = user.get('onboarding_completed') or user.get('archetype_primary')
+        if not (has_old_onboarding or has_new_onboarding):
             await message.answer("Сначала давай познакомимся! Напиши /start")
             return
 
@@ -285,8 +291,10 @@ async def question_handler(message: types.Message, state: FSMContext):
             await message.answer("Напиши /start чтобы начать!")
             return
 
-        # Check if user completed onboarding
-        if not user.get('age') or not user.get('gender'):
+        # Check if user completed onboarding (old: age/gender, new: archetype-based)
+        has_old_onboarding = user.get('age') and user.get('gender')
+        has_new_onboarding = user.get('onboarding_completed') or user.get('archetype_primary')
+        if not (has_old_onboarding or has_new_onboarding):
             await message.answer("Сначала давай познакомимся! Напиши /start")
             return
 
