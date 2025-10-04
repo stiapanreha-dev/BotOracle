@@ -65,6 +65,25 @@ class UserModel:
         )
 
     @staticmethod
+    async def update_user_info(user_id: int, age: int = None, gender: str = None):
+        """Update user info by internal user ID"""
+        if age is not None and gender is not None:
+            await db.execute(
+                "UPDATE users SET age = $1, gender = $2 WHERE id = $3",
+                age, gender, user_id
+            )
+        elif age is not None:
+            await db.execute(
+                "UPDATE users SET age = $1 WHERE id = $2",
+                age, user_id
+            )
+        elif gender is not None:
+            await db.execute(
+                "UPDATE users SET gender = $1 WHERE id = $2",
+                gender, user_id
+            )
+
+    @staticmethod
     async def init_user_preferences(user_id: int):
         """Initialize user preferences and cadence settings"""
         # Create user preferences if not exists

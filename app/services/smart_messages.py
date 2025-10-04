@@ -117,14 +117,12 @@ class SmartMessagesService:
     # ========================================================================
 
     async def generate_onboarding_questions(self) -> List[str]:
-        """Generate 4 onboarding questions for archetype detection"""
+        """Generate 2 onboarding questions for archetype detection"""
         prompt = await self._get_prompt('onboarding_question_generator')
         if not prompt:
             return [
                 "Представь: ты оказался в ситуации, где нужно выбрать между безопасностью и свободой. Что бы ты сделал и почему?",
-                "Ты видишь, что человеку нужна помощь, но это требует от тебя серьёзных усилий. Как ты поступишь?",
-                "У тебя есть идея, которая кажется тебе важной, но все вокруг сомневаются. Твои действия?",
-                "Ты столкнулся с выбором: следовать правилам или поступить так, как считаешь правильным. Что выберешь?"
+                "У тебя есть идея, которая кажется тебе важной, но все вокруг сомневаются. Твои действия?"
             ]
 
         response = await self._call_openai(prompt, temperature=0.9)
@@ -132,14 +130,12 @@ class SmartMessagesService:
         # Parse questions (separated by double newline)
         questions = [q.strip() for q in response.split('\n\n') if q.strip()]
 
-        # Ensure we have exactly 4 questions
-        if len(questions) != 4:
-            logger.warning(f"Expected 4 questions, got {len(questions)}, using fallback")
+        # Ensure we have exactly 2 questions
+        if len(questions) != 2:
+            logger.warning(f"Expected 2 questions, got {len(questions)}, using fallback")
             return [
                 "Представь: ты оказался в ситуации, где нужно выбрать между безопасностью и свободой. Что бы ты сделал и почему?",
-                "Ты видишь, что человеку нужна помощь, но это требует от тебя серьёзных усилий. Как ты поступишь?",
-                "У тебя есть идея, которая кажется тебе важной, но все вокруг сомневаются. Твои действия?",
-                "Ты столкнулся с выбором: следовать правилам или поступить так, как считаешь правильным. Что выберешь?"
+                "У тебя есть идея, которая кажется тебе важной, но все вокруг сомневаются. Твои действия?"
             ]
 
         return questions
