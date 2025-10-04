@@ -264,13 +264,19 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
         logger.error(f"Error in oracle question button handler: {e}")
         await message.answer("Произошла ошибка. Попробуйте позже.")
 
-@router.message(lambda message: not message.text.startswith('/') and message.text not in ["📨 Сообщение дня", "💎 Подписка", "ℹ️ Мой статус", "🔮 Задать вопрос Оракулу"])
+@router.message(lambda message: message.text and not message.text.startswith('/') and message.text not in ["📨 Сообщение дня", "💎 Подписка", "ℹ️ Мой статус", "🔮 Задать вопрос Оракулу"])
 async def question_handler(message: types.Message, state: FSMContext):
     """Handle all text questions - route to Administrator or Oracle based on FSM state"""
     try:
         # Check if user is in onboarding
         current_state = await state.get_state()
-        if current_state in [OnboardingStates.waiting_for_age.state, OnboardingStates.waiting_for_gender.state]:
+        onboarding_states = [
+            OnboardingStates.waiting_for_q1.state,
+            OnboardingStates.waiting_for_q2.state,
+            OnboardingStates.waiting_for_q3.state,
+            OnboardingStates.waiting_for_q4.state
+        ]
+        if current_state in onboarding_states:
             # Let onboarding handler process this
             return
 
