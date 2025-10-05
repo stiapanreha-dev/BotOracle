@@ -24,7 +24,7 @@ router = Router()
 from app.services.ai_router import call_admin_ai, call_oracle_ai, call_oracle_ai_stream
 import asyncio
 
-@router.message(F.text == "📨 Сообщение дня")
+@router.message(F.text == "🌙 Шепот дня")
 async def daily_message_handler(message: types.Message):
     """Handle daily message requests - generates personalized AI message"""
     logger.info(f"Daily message button pressed by user {message.from_user.id}")
@@ -49,52 +49,25 @@ async def daily_message_handler(message: types.Message):
             await message.answer(repeat_message)
             return
 
-        # Generate personalized daily message using AI
-        await message.answer(persona.wrap("генерирую для тебя сегодняшнее сообщение... 🎨"))
-
-        # Build prompt for AI to generate daily message
-        age = user.get('age', 25)
-        gender = user.get('gender', 'other')
-
-        # Variety of styles and emotions for random selection
-        import random
-        styles = ['мотивирующий', 'вдохновляющий', 'поддерживающий', 'философский', 'дружеский']
-        emotions = ['позитивная', 'спокойная', 'энергичная', 'мудрая', 'теплая']
-
-        style = random.choice(styles)
-        emotion = random.choice(emotions)
-
-        prompt = f"""Создай короткое мотивирующее/вдохновляющее сообщение дня для пользователя.
-
-Характеристики пользователя:
-- Возраст: {age}
-- Пол: {gender}
-
-Стиль: {style}
-Эмоция: {emotion}
-
-Требования:
-- 1-2 предложения максимум
-- Личное обращение, эмоциональное
-- Без банальностей
-- На русском языке
-- Без эмодзи (их добавит персона)"""
+        # Generate personalized daily whisper using AI
+        await message.answer("🌙")
 
         # Show typing status while generating
         await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
-        # Generate message using Administrator AI
+        # Generate whisper using specialized AI function
+        from app.services.ai_client import generate_daily_whisper
         user_context = {
-            'age': age,
-            'gender': gender,
+            'age': user.get('age', 25),
+            'gender': user.get('gender', 'other'),
             'user_id': user['id'],
-            'archetype_primary': user.get('archetype_primary'),
+            'archetype_primary': user.get('archetype_primary', 'explorer'),
             'archetype_secondary': user.get('archetype_secondary')
         }
-        ai_message = await call_admin_ai(prompt, user_context)
+        whisper = await generate_daily_whisper(user_context)
 
-        # Send generated message with Administrator emoji
-        await message.answer(f"💬 {persona.wrap(ai_message)}")
+        # Send generated whisper (already personalized, no persona wrap needed)
+        await message.answer(f"🌙 **Шепот дня:**\n\n{whisper}", parse_mode="Markdown")
 
         # Mark as sent (AI-generated, no template ID needed)
         await DailyMessageModel.mark_sent(user['id'])
@@ -102,7 +75,7 @@ async def daily_message_handler(message: types.Message):
         # Update last seen
         await UserModel.update_last_seen(user['id'])
 
-        logger.info(f"Daily message generated for user {user['id']}: style={style}, emotion={emotion}")
+        logger.info(f"Daily whisper generated for user {user['id']}")
 
     except Exception as e:
         logger.error(f"Error in daily message handler: {e}")
@@ -191,7 +164,7 @@ async def status_handler(message: types.Message):
             status_text += f"💎 Подписка: не активна\n"
 
         daily_sent = await DailyMessageModel.is_sent_today(user['id'])
-        status_text += f"📨 Сообщение дня: {'✅ получено' if daily_sent else '⏳ доступно'}\n"
+        status_text += f"🌙 Шепот дня: {'✅ получено' if daily_sent else '⏳ доступно'}\n"
 
         await message.answer(persona.wrap(status_text))
         await UserModel.update_last_seen(user['id'])
@@ -271,7 +244,7 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
         logger.error(f"Error in oracle question button handler: {e}")
         await message.answer("Произошла ошибка. Попробуйте позже.")
 
-@router.message(lambda message: message.text and not message.text.startswith('/') and message.text not in ["📨 Сообщение дня", "💎 Подписка", "ℹ️ Мой статус", "🔮 Задать вопрос Оракулу"])
+@router.message(lambda message: message.text and not message.text.startswith('/') and message.text not in ["🌙 Шепот дня", "💎 Подписка", "ℹ️ Мой статус", "🔮 Задать вопрос Оракулу"])
 async def question_handler(message: types.Message, state: FSMContext):
     """Handle all text questions - route to Administrator or Oracle based on FSM state"""
     try:
@@ -647,7 +620,7 @@ async def help_handler(message: types.Message):
 🤖 **Oracle Lounge - Справка**
 
 **Доступные команды:**
-• 📨 Сообщение дня - получить ежедневное сообщение
+• 🌙 Шепот дня - получить ежедневное сообщение
 • 💎 Подписка - управление подпиской
 • ℹ️ Мой статус - показать текущий статус
 • /help - эта справка

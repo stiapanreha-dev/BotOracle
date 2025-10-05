@@ -81,16 +81,12 @@ class SchedulerService:
         logger.info(f"Checking for users to send daily messages at {utc_now} UTC")
 
         try:
-            # Get random daily message
-            daily_message = await DailyMessageModel.get_random_message()
-            if not daily_message:
-                logger.warning("No daily messages available")
-                return
-
             # Find all users who might need messages (haven't received today)
+            # Now we include user profile for AI-generated whispers
             users = await db.fetch(
                 """
-                SELECT u.id, u.tg_user_id, u.daily_message_time, u.tz
+                SELECT u.id, u.tg_user_id, u.daily_message_time, u.tz,
+                       u.age, u.gender, u.archetype_primary, u.archetype_secondary
                 FROM users u
                 WHERE u.is_blocked = false
                 AND u.daily_message_time IS NOT NULL
@@ -139,24 +135,37 @@ class SchedulerService:
             sent_count = 0
             blocked_count = 0
 
+            # Import AI whisper generator
+            from app.services.ai_client import generate_daily_whisper
+
             for user in users_to_send:
                 try:
+                    # Generate personalized whisper for this user
+                    user_context = {
+                        'age': user['age'] or 25,
+                        'gender': user['gender'] or 'other',
+                        'user_id': user['id'],
+                        'archetype_primary': user['archetype_primary'] or 'explorer',
+                        'archetype_secondary': user['archetype_secondary']
+                    }
+                    whisper = await generate_daily_whisper(user_context)
+
                     # Send message
-                    text = f"📨 **Сообщение дня:**\n\n{daily_message['text']}"
+                    text = f"🌙 **Шепот дня:**\n\n{whisper}"
                     await self.bot.send_message(
                         user['tg_user_id'],
                         text,
                         parse_mode="Markdown"
                     )
 
-                    # Mark as sent
-                    await DailyMessageModel.mark_sent(user['id'], daily_message['id'])
+                    # Mark as sent (AI-generated, no template ID)
+                    await DailyMessageModel.mark_sent(user['id'])
 
                     # Log event
                     await EventModel.log_event(
                         user_id=user['id'],
                         event_type='daily_sent',
-                        meta={'message_id': daily_message['id'], 'scheduled_time': str(user['daily_message_time'])}
+                        meta={'ai_generated': True, 'scheduled_time': str(user['daily_message_time'])}
                     )
 
                     sent_count += 1
@@ -181,19 +190,14 @@ class SchedulerService:
             logger.error(f"Error during timezone-aware daily message distribution: {e}")
 
     async def send_daily_messages(self):
-        logger.info("Starting daily message distribution")
+        logger.info("Starting daily message distribution (legacy method)")
 
         try:
-            # Get random daily message
-            daily_message = await DailyMessageModel.get_random_message()
-            if not daily_message:
-                logger.warning("No daily messages available")
-                return
-
             # Get all active users who haven't received today's message
+            # Include user profile for AI-generated whispers
             users = await db.fetch(
                 """
-                SELECT u.id, u.tg_user_id
+                SELECT u.id, u.tg_user_id, u.age, u.gender, u.archetype_primary, u.archetype_secondary
                 FROM users u
                 WHERE u.is_blocked = false
                 AND NOT EXISTS (
@@ -206,24 +210,37 @@ class SchedulerService:
             sent_count = 0
             blocked_count = 0
 
+            # Import AI whisper generator
+            from app.services.ai_client import generate_daily_whisper
+
             for user in users:
                 try:
+                    # Generate personalized whisper for this user
+                    user_context = {
+                        'age': user['age'] or 25,
+                        'gender': user['gender'] or 'other',
+                        'user_id': user['id'],
+                        'archetype_primary': user['archetype_primary'] or 'explorer',
+                        'archetype_secondary': user['archetype_secondary']
+                    }
+                    whisper = await generate_daily_whisper(user_context)
+
                     # Send message
-                    text = f"📨 **Сообщение дня:**\n\n{daily_message['text']}"
+                    text = f"🌙 **Шепот дня:**\n\n{whisper}"
                     await self.bot.send_message(
                         user['tg_user_id'],
                         text,
                         parse_mode="Markdown"
                     )
 
-                    # Mark as sent
-                    await DailyMessageModel.mark_sent(user['id'], daily_message['id'])
+                    # Mark as sent (AI-generated, no template ID)
+                    await DailyMessageModel.mark_sent(user['id'])
 
                     # Log event
                     await EventModel.log_event(
                         user_id=user['id'],
                         event_type='daily_sent',
-                        meta={'message_id': daily_message['id']}
+                        meta={'ai_generated': True}
                     )
 
                     sent_count += 1

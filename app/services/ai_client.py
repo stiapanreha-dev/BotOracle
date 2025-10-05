@@ -430,6 +430,88 @@ class AIClient:
 
         return f"Мой персональный ответ для тебя: {question[:120]}… (мудрость требует времени для размышлений)"
 
+    async def generate_daily_whisper(self, user_context: Dict[str, Any]) -> str:
+        """Generate personalized daily whisper based on user profile"""
+        if not self.client:
+            return await self._daily_whisper_stub(user_context)
+
+        try:
+            # Get prompt template from database
+            prompt_template = await self._get_prompt('daily_whisper_generator')
+            if not prompt_template:
+                logger.warning("Daily whisper prompt not found in database, using stub")
+                return await self._daily_whisper_stub(user_context)
+
+            # Extract user context
+            age = user_context.get('age', 25)
+            gender = user_context.get('gender', 'other')
+            gender_ru = 'мужской' if gender == 'male' else 'женский' if gender == 'female' else 'другое'
+
+            # Get archetype info
+            archetype_primary = user_context.get('archetype_primary', 'explorer')
+            archetype_map = {
+                'innocent': ('Невинный/Простодушный', 'оптимизм, вера в добро, стремление к простоте'),
+                'sage': ('Мудрец', 'поиск истины, анализ, глубокое понимание'),
+                'explorer': ('Искатель', 'свобода, открытия, стремление к новому'),
+                'outlaw': ('Бунтарь', 'независимость, разрушение старого, революция'),
+                'magician': ('Маг', 'трансформация, влияние, создание реальности'),
+                'hero': ('Герой', 'мужество, преодоление, достижение цели'),
+                'lover': ('Любовник', 'страсть, близость, эстетика'),
+                'jester': ('Шут', 'радость, легкость, игра'),
+                'everyperson': ('Обыватель', 'принадлежность, реализм, солидарность'),
+                'caregiver': ('Заботливый', 'помощь другим, сострадание, защита'),
+                'ruler': ('Правитель', 'контроль, порядок, ответственность'),
+                'creator': ('Творец', 'самовыражение, инновации, создание')
+            }
+            archetype_name, archetype_desc = archetype_map.get(archetype_primary, ('Искатель', 'поиск себя и смысла'))
+
+            # Format the prompt
+            system_prompt = prompt_template.format(
+                age=age,
+                gender=gender_ru,
+                archetype=archetype_name,
+                archetype_description=archetype_desc
+            )
+
+            # Generate whisper
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Создай шепот дня для этого пользователя."}
+                ],
+                temperature=0.9,  # Higher creativity for varied whispers
+                max_tokens=150
+            )
+
+            whisper = response.choices[0].message.content.strip()
+
+            # Remove quotes if AI wrapped the response
+            if whisper.startswith('"') and whisper.endswith('"'):
+                whisper = whisper[1:-1]
+            if whisper.startswith('«') and whisper.endswith('»'):
+                whisper = whisper[1:-1]
+
+            logger.info(f"Generated daily whisper for user (age={age}, gender={gender}, archetype={archetype_primary})")
+            return whisper
+
+        except Exception as e:
+            logger.error(f"Error generating daily whisper: {e}")
+            return await self._daily_whisper_stub(user_context)
+
+    async def _daily_whisper_stub(self, user_context: Dict[str, Any]) -> str:
+        """Fallback stub for daily whisper"""
+        stubs = [
+            "иногда тишина говорит больше, чем тысяча слов",
+            "твоя уникальность — не в том, чтобы быть лучше других, а в том, чтобы быть собой",
+            "не всё, что кажется концом, действительно заслуживает траура",
+            "сегодня позволь себе просто быть — без целей и ожиданий"
+        ]
+        # Simple rotation based on day
+        from datetime import date
+        index = date.today().day % len(stubs)
+        return stubs[index]
+
 # Global AI client instance
 ai_client = AIClient()
 
@@ -445,3 +527,7 @@ async def call_oracle_ai_stream(question: str, user_context: Dict[str, Any] = No
     """Entry point for Oracle AI responses with streaming"""
     async for chunk in ai_client.get_oracle_response_stream(question, user_context or {}):
         yield chunk
+
+async def generate_daily_whisper(user_context: Dict[str, Any] = None) -> str:
+    """Entry point for generating personalized daily whisper"""
+    return await ai_client.generate_daily_whisper(user_context or {})

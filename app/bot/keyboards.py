@@ -9,7 +9,7 @@ def get_main_menu(has_subscription: bool = False) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="🔮 Задать вопрос Оракулу")],
-            [KeyboardButton(text="📨 Сообщение дня")],
+            [KeyboardButton(text="🌙 Шепот дня")],
             [KeyboardButton(text="💎 Подписка"), KeyboardButton(text="ℹ️ Мой статус")],
         ],
         resize_keyboard=True,

@@ -39,7 +39,7 @@ async def start_handler(message: types.Message):
     await UserModel.update_last_seen(user['id'])
 
     kb = InlineKeyboardBuilder()
-    kb.button(text="📨 Сообщение дня", callback_data="daily")
+    kb.button(text="🌙 Шепот дня", callback_data="daily")
     kb.button(text="❓ Задать вопрос", callback_data="ask")
     kb.button(text="💳 Подписка", callback_data="subscription")
     kb.button(text="ℹ️ FAQ", callback_data="faq")
@@ -90,18 +90,23 @@ async def daily_message_handler(callback: types.CallbackQuery):
 
     # Check if already sent today
     if await DailyMessageModel.is_sent_today(user['id']):
-        await callback.message.answer("📨 Вы уже получили сообщение дня! Возвращайтесь завтра за новым.")
+        await callback.message.answer("🌙 Вы уже получили шепот дня! Возвращайтесь завтра за новым.")
         return
 
-    # Get random message
-    daily_msg = await DailyMessageModel.get_random_message()
-    if not daily_msg:
-        await callback.message.answer("😔 Извините, сообщения временно недоступны.")
-        return
+    # Generate personalized whisper using AI
+    from app.services.ai_client import generate_daily_whisper
+    user_context = {
+        'age': user.get('age', 25),
+        'gender': user.get('gender', 'other'),
+        'user_id': user['id'],
+        'archetype_primary': user.get('archetype_primary', 'explorer'),
+        'archetype_secondary': user.get('archetype_secondary')
+    }
+    whisper = await generate_daily_whisper(user_context)
 
     # Send message and mark as sent
-    await callback.message.answer(f"📨 **Сообщение дня:**\n\n{daily_msg['text']}", parse_mode="Markdown")
-    await DailyMessageModel.mark_sent(user['id'], daily_msg['id'])
+    await callback.message.answer(f"🌙 **Шепот дня:**\n\n{whisper}", parse_mode="Markdown")
+    await DailyMessageModel.mark_sent(user['id'])
 
     # Return to main menu
     kb = InlineKeyboardBuilder()
