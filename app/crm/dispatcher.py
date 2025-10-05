@@ -95,19 +95,28 @@ class CRMDispatcher:
     async def _get_task_message(self, task_type: str, persona, task: Dict[str, Any]) -> str:
         """Generate message text for task type"""
         try:
+            # Handle AI-generated daily whisper
+            if task_type in ('DAILY_MSG_PROMPT', 'DAILY_MSG_PUSH'):
+                from app.services.ai_client import generate_daily_whisper
+
+                # Generate personalized whisper
+                user_context = {
+                    'age': task.get('age', 25),
+                    'gender': task.get('gender', 'other'),
+                    'user_id': task.get('user_id'),
+                    'archetype_primary': task.get('archetype_primary', 'explorer'),
+                    'archetype_secondary': task.get('archetype_secondary')
+                }
+                whisper = await generate_daily_whisper(user_context)
+
+                # Return with moon emoji prefix
+                return f"🌙 **Шепот дня:**\n\n{whisper}"
+
             # Get template based on task type and user's tone preference
             template = await AdminTemplateModel.get_template(task_type, persona.tone)
 
             # Handle special task types that need content substitution
-            if task_type == 'DAILY_MSG_PUSH':
-                # Get random daily message and substitute it in template
-                daily_msg = await DailyMessageModel.get_random_message()
-                if daily_msg:
-                    template = template.replace('{TEXT}', daily_msg['text'])
-                else:
-                    template = template.replace('{TEXT}', 'особое сообщение для тебя сегодня')
-
-            elif task_type == 'LIMIT_INFO':
+            if task_type == 'LIMIT_INFO':
                 # Substitute remaining count
                 payload = task.get('payload', {})
                 if isinstance(payload, str):

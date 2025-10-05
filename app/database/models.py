@@ -389,7 +389,8 @@ class AdminTaskModel:
         """Get tasks that are due for execution"""
         return await db.fetch(
             """
-            SELECT t.*, u.tg_user_id, u.age, u.gender, u.username
+            SELECT t.*, u.tg_user_id, u.age, u.gender, u.username,
+                   u.archetype_primary, u.archetype_secondary
             FROM admin_tasks t
             JOIN users u ON u.id = t.user_id
             WHERE t.status IN ('scheduled', 'due')
