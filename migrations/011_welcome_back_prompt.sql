@@ -14,7 +14,7 @@ VALUES (
 КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ:
 - Возраст: {age} лет
 - Пол: {gender}
-- Архетип: {archetype_primary}
+- Архетип: {archetype}
 - Есть подписка: {has_subscription}
 
 ТВОЯ ЗАДАЧА:
