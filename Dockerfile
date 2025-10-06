@@ -10,10 +10,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy .git to extract commit hash, then remove it (Railway includes .git)
-COPY .git/ ./.git/
-RUN git rev-parse --short HEAD > /app/GIT_COMMIT 2>/dev/null || echo "no-git" > /app/GIT_COMMIT
-RUN rm -rf .git
+# Set git commit hash (Railway doesn't include .git)
+ARG RAILWAY_GIT_COMMIT_SHA
+RUN echo "${RAILWAY_GIT_COMMIT_SHA:-unknown}" > /app/GIT_COMMIT
 
 COPY app/ ./app/
 COPY config/ ./config/
