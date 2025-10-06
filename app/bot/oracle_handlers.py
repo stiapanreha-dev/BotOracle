@@ -349,6 +349,9 @@ async def question_handler(message: types.Message, state: FSMContext):
                     return
 
                 # Direct answer from Oracle (no clarifying questions for free users)
+                # Show typing status while generating
+                await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
                 user_context = {
                     'age': user.get('age'),
                     'gender': user.get('gender'),
@@ -443,6 +446,9 @@ async def question_handler(message: types.Message, state: FSMContext):
 
             if not questions:
                 # No clarifying questions generated, answer directly (fallback)
+                # Show typing status while generating
+                await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
                 user_context = {
                     'age': user.get('age'),
                     'gender': user.get('gender'),
@@ -518,6 +524,9 @@ async def question_handler(message: types.Message, state: FSMContext):
             enriched_question = f"{original_question}{context_addition}\nОтвет пользователя на уточняющие вопросы: {question}"
 
             # Call Oracle AI with enriched context
+            # Show typing status while generating
+            await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
+
             user_context = {
                 'age': user.get('age'),
                 'gender': user.get('gender'),
@@ -703,10 +712,10 @@ async def help_handler(message: types.Message):
 
     await message.answer(help_text, parse_mode="Markdown")
 
-# Debug handler - catch all unhandled messages
-@router.message()
-async def debug_unhandled_message(message: types.Message):
-    """Log unhandled messages for debugging"""
-    logger.warning(f"UNHANDLED MESSAGE: text=\"{message.text}\", from_user={message.from_user.id}")
-    await message.answer(f"Debug: получено сообщение \"{message.text}\"")
+# Debug handler - DISABLED to prevent duplicate messages
+# @router.message()
+# async def debug_unhandled_message(message: types.Message):
+#     """Log unhandled messages for debugging"""
+#     logger.warning(f"UNHANDLED MESSAGE: text=\"{message.text}\", from_user={message.from_user.id}")
+#     await message.answer(f"Debug: получено сообщение \"{message.text}\"")
 
