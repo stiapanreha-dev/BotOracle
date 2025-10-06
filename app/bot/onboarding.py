@@ -33,8 +33,11 @@ async def start_command(message: types.Message, state: FSMContext):
             message.from_user.username
         )
 
-        # Check if user already completed onboarding
-        if user.get('onboarding_completed'):
+        # Check if user already completed onboarding (new or legacy)
+        has_legacy_onboarding = user.get('age') and user.get('gender')
+        has_new_onboarding = user.get('onboarding_completed')
+
+        if has_new_onboarding or has_legacy_onboarding:
             # User already onboarded, show welcome back message
             await message.answer(
                 "С возвращением! 🌟 Рад тебя видеть снова."
