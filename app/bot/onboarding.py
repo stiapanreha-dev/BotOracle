@@ -41,7 +41,6 @@ async def start_command(message: types.Message, state: FSMContext):
             # User already onboarded, show AI-generated welcome back message
             from app.services.smart_messages import generate_system_message
             from app.database.models import SubscriptionModel
-            from app.services.persona import PersonaFactory
             from app.bot.keyboards import get_main_menu
 
             # Get user context for personalized welcome
@@ -57,12 +56,9 @@ async def start_command(message: types.Message, state: FSMContext):
             }
 
             welcome_message = await generate_system_message('welcome_back', user_context)
-            persona = PersonaFactory({
-                'age': user.get('age', 25),
-                'gender': user.get('gender', 'other')
-            })
 
-            await message.answer(persona.wrap(welcome_message), parse_mode="Markdown")
+            # Send welcome message with 💬 emoji (Admin persona)
+            await message.answer(f"💬 {welcome_message}", parse_mode="Markdown")
             await message.answer("Выбери действие:", reply_markup=get_main_menu(has_subscription))
 
             await state.clear()

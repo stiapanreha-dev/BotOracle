@@ -622,41 +622,27 @@ class AssistantAIClient:
     async def _build_admin_context(self, age: int, gender: str, has_subscription: bool,
                                    free_chat: bool = False, archetype_primary: str = None,
                                    archetype_secondary: str = None) -> str:
-        """Build context information for Admin"""
-        # Use archetype-based tone if available, otherwise age-based
-        tone = ""
-        if archetype_primary:
-            # Archetype-based personalization takes priority
-            tone = "Адаптируй стиль общения под архетип пользователя."
-        elif age:
-            # Fallback to age-based tone for legacy users
-            if age <= 25:
-                tone = "Будь игривой, используй эмодзи, молодежный сленг."
-            elif age >= 46:
-                tone = "Будь заботливой и уважительной, меньше эмодзи."
-            else:
-                tone = "Дружелюбно, умеренное количество эмодзи."
-        else:
-            # Default neutral tone
-            tone = "Дружелюбно, умеренное количество эмодзи."
-
-        selling = ""
-        if free_chat:
-            selling = "Просто помогай и общайся. НЕ упоминай счетчики вопросов или лимиты."
-        elif has_subscription:
-            selling = "Для глубоких вопросов можешь намекнуть на кнопку '🔮 Задать вопрос Оракулу'."
-        else:
-            selling = "ВАЖНО: Пользователь БЕЗ подписки - плавно подталкивай к покупке. В каждом 2-3 ответе упоминай ценность подписки (доступ к Оракулу, глубокие ответы). При глубоких вопросах предлагай подписку. Мягкие формулировки: 'Оракул помог бы глубже', 'Вопрос достоин Оракула'. Напоминай об ограниченных бесплатных вопросах (5 штук). Будь настойчивой, но не навязчивой."
-
-        # Add archetype information if available
-        archetype_info_text = ""
+        """Build context information for Admin - factual data only, no directives"""
+        # Build archetype information if available
+        archetype_info = ""
         if archetype_primary:
             from app.database.models import ArchetypeModel
-            archetype_info = await ArchetypeModel.get_archetype(archetype_primary)
-            if archetype_info:
-                archetype_info_text = f" Архетип: {archetype_info['name_ru']}. {archetype_info['communication_style']}"
+            archetype_data = await ArchetypeModel.get_archetype(archetype_primary)
+            if archetype_data:
+                archetype_info = f"\nАрхетип пользователя: {archetype_data['name_ru']}"
+                if archetype_secondary:
+                    secondary_data = await ArchetypeModel.get_archetype(archetype_secondary)
+                    if secondary_data:
+                        archetype_info += f", вторичный: {secondary_data['name_ru']}"
 
-        return f"КОНТЕКСТ: Пользователь {age} лет, пол: {gender}.{archetype_info_text} {tone} {selling}"
+        # Build subscription info
+        subscription_info = "Подписка: активна" if has_subscription else "Подписка: отсутствует"
+
+        # Return factual context only
+        return f"""КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ:
+Возраст: {age} лет
+Пол: {gender}
+{subscription_info}{archetype_info}"""
 
     async def _admin_stub(self, question: str) -> str:
         """Fallback stub for Administrator"""
