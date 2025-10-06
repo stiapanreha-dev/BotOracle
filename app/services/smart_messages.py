@@ -116,29 +116,31 @@ class SmartMessagesService:
     # Onboarding Messages
     # ========================================================================
 
-    async def generate_onboarding_questions(self) -> List[str]:
-        """Generate 2 onboarding questions for archetype detection"""
-        prompt = await self._get_prompt('onboarding_question_generator')
-        if not prompt:
+    async def generate_onboarding_questions(self, age: int, gender: str) -> List[str]:
+        """Generate 2 onboarding questions for archetype detection (adapted to age/gender)"""
+        prompt_template = await self._get_prompt('onboarding_question_generator')
+        if not prompt_template:
             return [
                 "Представь: ты оказался в ситуации, где нужно выбрать между безопасностью и свободой. Что бы ты сделал и почему?",
                 "У тебя есть идея, которая кажется тебе важной, но все вокруг сомневаются. Твои действия?"
             ]
 
+        # Format prompt with user context
+        prompt = prompt_template.format(age=age, gender=gender)
         response = await self._call_openai(prompt, temperature=0.9)
 
         # Parse questions (separated by double newline)
         questions = [q.strip() for q in response.split('\n\n') if q.strip()]
 
-        # Ensure we have exactly 2 questions
-        if len(questions) != 2:
-            logger.warning(f"Expected 2 questions, got {len(questions)}, using fallback")
+        # Ensure we have at least 2 questions, take first 2
+        if len(questions) < 2:
+            logger.warning(f"Expected at least 2 questions, got {len(questions)}, using fallback")
             return [
                 "Представь: ты оказался в ситуации, где нужно выбрать между безопасностью и свободой. Что бы ты сделал и почему?",
                 "У тебя есть идея, которая кажется тебе важной, но все вокруг сомневаются. Твои действия?"
             ]
 
-        return questions
+        return questions[:2]  # Take first 2 questions
 
     async def validate_onboarding_response(self, question: str, user_response: str) -> Dict[str, Any]:
         """Validate if user response is meaningful or trolling"""
@@ -318,8 +320,8 @@ async def generate_welcome() -> str:
     return await smart_messages.generate_welcome_message()
 
 
-async def generate_onboarding_questions() -> List[str]:
-    return await smart_messages.generate_onboarding_questions()
+async def generate_onboarding_questions(age: int, gender: str) -> List[str]:
+    return await smart_messages.generate_onboarding_questions(age, gender)
 
 
 async def validate_response(question: str, response: str) -> Dict[str, Any]:

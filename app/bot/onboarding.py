@@ -130,8 +130,8 @@ async def process_q2(message: types.Message, state: FSMContext):
         # Save age and gender to database
         await UserModel.update_user_info(user_id, age=age, gender=gender)
 
-        # Generate 2 archetype questions
-        questions = await generate_onboarding_questions()
+        # Generate 2 archetype questions (adapted to age and gender)
+        questions = await generate_onboarding_questions(age=age, gender=gender)
 
         # Save questions to FSM
         await state.update_data(
