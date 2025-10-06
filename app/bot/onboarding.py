@@ -38,17 +38,31 @@ async def start_command(message: types.Message, state: FSMContext):
         has_new_onboarding = user.get('onboarding_completed')
 
         if has_new_onboarding or has_legacy_onboarding:
-            # User already onboarded, show welcome back message
-            await message.answer(
-                "С возвращением! 🌟 Рад тебя видеть снова."
-            )
-
-            # Check subscription and send appropriate main menu
-            from app.bot.keyboards import get_main_menu
+            # User already onboarded, show AI-generated welcome back message
+            from app.services.smart_messages import generate_system_message
             from app.database.models import SubscriptionModel
+            from app.services.persona import PersonaEngine
+            from app.bot.keyboards import get_main_menu
+
+            # Get user context for personalized welcome
             subscription = await SubscriptionModel.get_active_subscription(user['id'])
             has_subscription = subscription is not None
 
+            user_context = {
+                'age': user.get('age', 25),
+                'gender': user.get('gender', 'other'),
+                'archetype_primary': user.get('archetype_primary', 'hero'),
+                'archetype_secondary': user.get('archetype_secondary'),
+                'has_subscription': has_subscription
+            }
+
+            welcome_message = await generate_system_message('welcome_back', user_context)
+            persona = PersonaEngine.get_admin_persona(
+                user.get('age', 25),
+                user.get('gender', 'other')
+            )
+
+            await message.answer(persona.wrap(welcome_message), parse_mode="Markdown")
             await message.answer("Выбери действие:", reply_markup=get_main_menu(has_subscription))
 
             await state.clear()

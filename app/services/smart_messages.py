@@ -342,6 +342,7 @@ class SmartMessagesService:
             'free_exhausted': 'system_free_exhausted',
             'subscription_active': 'system_subscription_active',
             'oracle_limit_reached': 'system_oracle_limit_reached',
+            'welcome_back': 'system_welcome_back',
         }
 
         prompt_key = prompt_key_map.get(message_type)
@@ -357,7 +358,8 @@ class SmartMessagesService:
                 'oracle_ready': f"🔮 **Оракул готов ответить на твой вопрос.**\n\nОсталось {user_context.get('remaining', 0)} вопросов на сегодня.",
                 'free_exhausted': "у тебя закончились бесплатные вопросы 😔\n\n💎 Получи подписку для безлимитного доступа:",
                 'subscription_active': f"у тебя уже есть подписка до {user_context.get('ends_at', '')} ✅\nможешь задавать вопросы оракулу (до 10 в день)",
-                'oracle_limit_reached': "на сегодня вопросы Оракулу закончились 🌙\n\nвозвращайся завтра!"
+                'oracle_limit_reached': "на сегодня вопросы Оракулу закончились 🌙\n\nвозвращайся завтра!",
+                'welcome_back': "с возвращением! 🌟 рада видеть тебя снова"
             }
             return fallbacks.get(message_type, "система обрабатывает запрос...")
 
@@ -374,7 +376,8 @@ class SmartMessagesService:
             archetype_description=archetype_info['description'],
             communication_style=archetype_info['communication_style'],
             remaining=user_context.get('remaining', 0),
-            ends_at=user_context.get('ends_at', '')
+            ends_at=user_context.get('ends_at', ''),
+            has_subscription='да' if user_context.get('has_subscription', False) else 'нет'
         )
 
         response = await self._call_openai(prompt, temperature=0.8)
