@@ -104,9 +104,18 @@ async def subscription_menu_handler(message: types.Message):
         subscription = await SubscriptionModel.get_active_subscription(user['id'])
 
         if subscription:
+            # Generate AI system message
+            from app.services.smart_messages import generate_system_message
+            user_context = {
+                'age': user.get('age', 25),
+                'gender': user.get('gender', 'other'),
+                'archetype_primary': user.get('archetype_primary', 'hero'),
+                'ends_at': subscription['ends_at'].strftime('%d.%m.%Y')
+            }
+            active_message = await generate_system_message('subscription_active', user_context)
+
             await message.answer(
-                persona.wrap(f"у тебя уже есть подписка до {subscription['ends_at'].strftime('%d.%m.%Y')} ✅\n"
-                           "можешь задавать вопросы оракулу (до 10 в день)")
+                persona.wrap(active_message)
             )
         else:
             # Generate payment URLs for all plans
@@ -201,8 +210,17 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
 
             if free_left <= 0:
                 # No free questions left
+                # Generate AI system message
+                from app.services.smart_messages import generate_system_message
+                user_context = {
+                    'age': user.get('age', 25),
+                    'gender': user.get('gender', 'other'),
+                    'archetype_primary': user.get('archetype_primary', 'hero')
+                }
+                exhausted_message = await generate_system_message('free_exhausted', user_context)
+
                 await message.answer(
-                    persona.wrap("у тебя закончились бесплатные вопросы 😔\n\n💎 Получи подписку для безлимитного доступа:"),
+                    persona.wrap(exhausted_message),
                     reply_markup=get_subscription_menu()
                 )
                 return
@@ -210,9 +228,18 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
             # Set FSM state to waiting for Oracle question (free questions still go to Oracle)
             await state.set_state(OracleQuestionStates.waiting_for_question)
 
+            # Generate AI system message
+            from app.services.smart_messages import generate_system_message
+            user_context = {
+                'age': user.get('age', 25),
+                'gender': user.get('gender', 'other'),
+                'archetype_primary': user.get('archetype_primary', 'hero'),
+                'remaining': free_left
+            }
+            prompt_message = await generate_system_message('free_questions_prompt', user_context)
+
             await message.answer(
-                persona.wrap(f"задавай свой вопрос! 💬\n\n"
-                           f"_У тебя осталось {free_left} {'вопрос' if free_left == 1 else 'вопроса' if free_left < 5 else 'вопросов'} из 5 бесплатных_"),
+                persona.wrap(prompt_message),
                 parse_mode="Markdown"
             )
             return
@@ -223,18 +250,33 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
 
         if oracle_used >= 10:
             # Daily Oracle limit reached
-            limit_message = persona.format_oracle_limit()
+            # Generate AI system message
+            from app.services.smart_messages import generate_system_message
+            user_context = {
+                'age': user.get('age', 25),
+                'gender': user.get('gender', 'other'),
+                'archetype_primary': user.get('archetype_primary', 'hero')
+            }
+            limit_message = await generate_system_message('oracle_limit_reached', user_context)
             await message.answer(limit_message)
             return
 
         # Set FSM state to waiting for Oracle question
         await state.set_state(OracleQuestionStates.waiting_for_question)
 
+        # Generate AI system message
+        from app.services.smart_messages import generate_system_message
         remaining = 10 - oracle_used
+        user_context = {
+            'age': user.get('age', 25),
+            'gender': user.get('gender', 'other'),
+            'archetype_primary': user.get('archetype_primary', 'hero'),
+            'remaining': remaining
+        }
+        ready_message = await generate_system_message('oracle_ready', user_context)
+
         await message.answer(
-            f"🔮 **Оракул готов ответить на твой вопрос.**\n\n"
-            f"Осталось {remaining} вопрос{'ов' if remaining > 1 else ''} на сегодня.\n\n"
-            f"_Напиши свой вопрос текстом:_",
+            ready_message,
             parse_mode="Markdown"
         )
 
@@ -290,9 +332,17 @@ async def question_handler(message: types.Message, state: FSMContext):
                 free_left = user.get('free_questions_left', 0)
 
                 if free_left <= 0:
-                    exhausted_message = persona.format_free_exhausted()
+                    # Generate AI system message
+                    from app.services.smart_messages import generate_system_message
+                    user_context_sys = {
+                        'age': user.get('age', 25),
+                        'gender': user.get('gender', 'other'),
+                        'archetype_primary': user.get('archetype_primary', 'hero')
+                    }
+                    exhausted_message = await generate_system_message('free_exhausted', user_context_sys)
+
                     await message.answer(
-                        f"{exhausted_message}\n\n💎 Получи подписку:",
+                        f"{persona.wrap(exhausted_message)}\n\n💎 Получи подписку:",
                         reply_markup=get_subscription_menu()
                     )
                     await state.clear()
@@ -344,7 +394,14 @@ async def question_handler(message: types.Message, state: FSMContext):
                     response = persona.format_free_remaining(remaining)
                     final_text += f"\n\n{response}"
                 else:
-                    response = persona.format_free_exhausted()
+                    # Generate AI system message
+                    from app.services.smart_messages import generate_system_message
+                    user_context_sys = {
+                        'age': user.get('age', 25),
+                        'gender': user.get('gender', 'other'),
+                        'archetype_primary': user.get('archetype_primary', 'hero')
+                    }
+                    response = await generate_system_message('free_exhausted', user_context_sys)
                     final_text += f"\n\n{response}\n\n💎 Получи подписку:"
 
                 await oracle_msg.edit_text(final_text, parse_mode="Markdown")
@@ -360,7 +417,14 @@ async def question_handler(message: types.Message, state: FSMContext):
 
             if oracle_used >= 10:
                 # Daily Oracle limit reached
-                limit_message = persona.format_oracle_limit()
+                # Generate AI system message
+                from app.services.smart_messages import generate_system_message
+                user_context = {
+                    'age': user.get('age', 25),
+                    'gender': user.get('gender', 'other'),
+                    'archetype_primary': user.get('archetype_primary', 'hero')
+                }
+                limit_message = await generate_system_message('oracle_limit_reached', user_context)
                 await message.answer(limit_message)
                 await state.clear()
                 return

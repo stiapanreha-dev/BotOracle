@@ -333,6 +333,53 @@ class SmartMessagesService:
     # System Messages
     # ========================================================================
 
+    async def generate_system_message(self, message_type: str, user_context: Dict[str, Any]) -> str:
+        """Generate system message using Oracle's voice and style"""
+        # Map message types to prompt keys
+        prompt_key_map = {
+            'free_questions_prompt': 'system_free_questions_prompt',
+            'oracle_ready': 'system_oracle_ready',
+            'free_exhausted': 'system_free_exhausted',
+            'subscription_active': 'system_subscription_active',
+            'oracle_limit_reached': 'system_oracle_limit_reached',
+        }
+
+        prompt_key = prompt_key_map.get(message_type)
+        if not prompt_key:
+            logger.warning(f"Unknown system message type: {message_type}")
+            return "система обрабатывает запрос..."
+
+        prompt_template = await self._get_prompt(prompt_key)
+        if not prompt_template:
+            # Fallback messages
+            fallbacks = {
+                'free_questions_prompt': f"задавай свой вопрос! 💬\n\n_У тебя осталось {user_context.get('remaining', 0)} вопросов из 5 бесплатных_",
+                'oracle_ready': f"🔮 **Оракул готов ответить на твой вопрос.**\n\nОсталось {user_context.get('remaining', 0)} вопросов на сегодня.",
+                'free_exhausted': "у тебя закончились бесплатные вопросы 😔\n\n💎 Получи подписку для безлимитного доступа:",
+                'subscription_active': f"у тебя уже есть подписка до {user_context.get('ends_at', '')} ✅\nможешь задавать вопросы оракулу (до 10 в день)",
+                'oracle_limit_reached': "на сегодня вопросы Оракулу закончились 🌙\n\nвозвращайся завтра!"
+            }
+            return fallbacks.get(message_type, "система обрабатывает запрос...")
+
+        # Get archetype info if available
+        archetype_code = user_context.get('archetype_primary', 'hero')
+        archetype_info = await self._get_archetype_info(archetype_code)
+
+        # Format prompt with all context
+        prompt = prompt_template.format(
+            age=user_context.get('age', 25),
+            gender=user_context.get('gender', 'unknown'),
+            archetype=archetype_code,
+            archetype_name=archetype_info['name'],
+            archetype_description=archetype_info['description'],
+            communication_style=archetype_info['communication_style'],
+            remaining=user_context.get('remaining', 0),
+            ends_at=user_context.get('ends_at', '')
+        )
+
+        response = await self._call_openai(prompt, temperature=0.8)
+        return response.strip()
+
     async def generate_error_message(self, error_type: str = "unknown") -> str:
         """Generate friendly error message"""
         prompt_template = await self._get_prompt('error_message')
@@ -393,3 +440,7 @@ async def generate_error_message(error_type: str = "unknown") -> str:
 
 async def generate_crm_message(task_type: str, user_context: Dict[str, Any]) -> str:
     return await smart_messages.generate_crm_message(task_type, user_context)
+
+
+async def generate_system_message(message_type: str, user_context: Dict[str, Any]) -> str:
+    return await smart_messages.generate_system_message(message_type, user_context)
