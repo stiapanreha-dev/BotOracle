@@ -279,6 +279,57 @@ class SmartMessagesService:
             }
 
     # ========================================================================
+    # CRM Messages
+    # ========================================================================
+
+    async def generate_crm_message(self, task_type: str, user_context: Dict[str, Any]) -> str:
+        """Generate personalized CRM message based on task type and user context"""
+        # Map task types to prompt keys
+        prompt_key_map = {
+            'PING': 'crm_ping',
+            'NUDGE_SUB': 'crm_nudge_sub',
+            'RECOVERY': 'crm_recovery',
+            'LIMIT_INFO': 'crm_limit_info',
+            'THANKS': 'crm_thanks'
+        }
+
+        prompt_key = prompt_key_map.get(task_type)
+        if not prompt_key:
+            logger.warning(f"Unknown task type for CRM generation: {task_type}")
+            return "привет! я здесь, если что нужно 🌟"
+
+        prompt_template = await self._get_prompt(prompt_key)
+        if not prompt_template:
+            # Fallback messages for each type
+            fallbacks = {
+                'PING': "привет! как у тебя дела? 😊",
+                'NUDGE_SUB': "хочешь больше доступа к Оракулу? попробуй премиум подписку 💎",
+                'RECOVERY': "давно тебя не видела! как ты? 🌟",
+                'LIMIT_INFO': "у тебя осталось мало бесплатных вопросов к Оракулу. хочешь безлимитный доступ? 🔮",
+                'THANKS': "спасибо за твой вопрос! 💫"
+            }
+            return fallbacks.get(task_type, "привет! 😊")
+
+        # Get archetype info if available
+        archetype_code = user_context.get('archetype_primary', 'hero')
+        archetype_info = await self._get_archetype_info(archetype_code)
+
+        # Format prompt with all context
+        prompt = prompt_template.format(
+            age=user_context.get('age', 25),
+            gender=user_context.get('gender', 'unknown'),
+            archetype=archetype_code,
+            archetype_name=archetype_info['name'],
+            archetype_description=archetype_info['description'],
+            communication_style=archetype_info['communication_style'],
+            tone=user_context.get('tone', 'friendly'),
+            remaining=user_context.get('remaining', 0)
+        )
+
+        response = await self._call_openai(prompt, temperature=0.9)
+        return response.strip()
+
+    # ========================================================================
     # System Messages
     # ========================================================================
 
@@ -338,3 +389,7 @@ async def generate_clarifying_questions(question: str, archetype: str) -> Dict[s
 
 async def generate_error_message(error_type: str = "unknown") -> str:
     return await smart_messages.generate_error_message(error_type)
+
+
+async def generate_crm_message(task_type: str, user_context: Dict[str, Any]) -> str:
+    return await smart_messages.generate_crm_message(task_type, user_context)

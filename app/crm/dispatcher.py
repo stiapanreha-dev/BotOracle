@@ -112,24 +112,36 @@ class CRMDispatcher:
                 # Return with moon emoji prefix
                 return f"🌙 **Шепот дня:**\n\n{whisper}"
 
-            # Get template based on task type and user's tone preference
+            # Handle AI-generated CRM messages (PING, NUDGE_SUB, RECOVERY, LIMIT_INFO, THANKS)
+            if task_type in ('PING', 'NUDGE_SUB', 'RECOVERY', 'LIMIT_INFO', 'THANKS'):
+                from app.services.smart_messages import generate_crm_message
+
+                # Prepare user context for AI generation
+                user_context = {
+                    'age': task.get('age', 25),
+                    'gender': task.get('gender', 'other'),
+                    'archetype_primary': task.get('archetype_primary', 'explorer'),
+                    'archetype_secondary': task.get('archetype_secondary'),
+                    'tone': persona.tone
+                }
+
+                # For LIMIT_INFO, add remaining count
+                if task_type == 'LIMIT_INFO':
+                    payload = task.get('payload', {})
+                    if isinstance(payload, str):
+                        import json
+                        payload = json.loads(payload)
+                    user_context['remaining'] = payload.get('remaining', 0)
+
+                # Generate message via AI
+                message = await generate_crm_message(task_type, user_context)
+
+                # Apply persona wrapping
+                return persona.wrap(message)
+
+            # Fallback to template-based generation for other types
             template = await AdminTemplateModel.get_template(task_type, persona.tone)
-
-            # Handle special task types that need content substitution
-            if task_type == 'LIMIT_INFO':
-                # Substitute remaining count
-                payload = task.get('payload', {})
-                if isinstance(payload, str):
-                    import json
-                    payload = json.loads(payload)
-
-                remaining = payload.get('remaining', 'несколько')
-                template = template.replace('{N}', str(remaining))
-                template = template.replace('{LEFT}', str(remaining))
-
-            # Apply persona wrapping
             message = persona.wrap(template)
-
             return message
 
         except Exception as e:
