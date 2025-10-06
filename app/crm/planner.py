@@ -92,7 +92,7 @@ class CRMPlanner:
         candidates = []
         user_id = user['id']
 
-        # DAILY_MSG_PROMPT - if user hasn't received daily message
+        # DAILY_MSG_PROMPT - daily whisper
         daily_sent_today = await DailyMessageModel.is_sent_today(user_id)
         if not daily_sent_today:
             candidates.append('DAILY_MSG_PROMPT')

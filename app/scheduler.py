@@ -39,13 +39,13 @@ class SchedulerService:
             name='Execute due CRM tasks'
         )
 
-        # Check for daily messages every minute (legacy - may be replaced by CRM)
-        self.scheduler.add_job(
-            self.send_daily_messages_by_user_time,
-            CronTrigger(minute='*'),
-            id='daily_messages',
-            name='Send daily messages based on user time'
-        )
+        # DISABLED - Daily messages now handled by CRM DAILY_MSG_PROMPT tasks
+        # self.scheduler.add_job(
+        #     self.send_daily_messages_by_user_time,
+        #     CronTrigger(minute='*'),
+        #     id='daily_messages',
+        #     name='Send daily messages based on user time'
+        # )
 
         # Daily metrics calculation at 23:55
         self.scheduler.add_job(
@@ -64,7 +64,7 @@ class SchedulerService:
         )
 
         self.scheduler.start()
-        logger.info("Scheduler started with jobs: CRM planning, CRM dispatcher, daily messages, metrics, subscription cleanup")
+        logger.info("Scheduler started with jobs: CRM planning, CRM dispatcher, metrics, subscription cleanup")
 
     async def stop(self):
         if self.scheduler.running:
