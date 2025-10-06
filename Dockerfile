@@ -10,12 +10,13 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy .git to extract commit hash, then remove it
-COPY .git/ ./.git/
-RUN git rev-parse --short HEAD > /app/GIT_COMMIT && rm -rf .git
+# Copy .git to extract commit hash, then remove it (Railway includes .git)
+COPY .git/ ./.git/ 2>/dev/null || echo "no-git" > /app/GIT_COMMIT
+RUN if [ -d .git ]; then git rev-parse --short HEAD > /app/GIT_COMMIT && rm -rf .git; fi
 
 COPY app/ ./app/
 COPY config/ ./config/
+COPY migrations/ ./migrations/
 COPY README.md ./
 
 RUN mkdir -p /app/logs
