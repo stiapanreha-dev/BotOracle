@@ -11,8 +11,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy .git to extract commit hash, then remove it (Railway includes .git)
-COPY .git/ ./.git/ 2>/dev/null || echo "no-git" > /app/GIT_COMMIT
-RUN if [ -d .git ]; then git rev-parse --short HEAD > /app/GIT_COMMIT && rm -rf .git; fi
+COPY .git/ ./.git/
+RUN git rev-parse --short HEAD > /app/GIT_COMMIT 2>/dev/null || echo "no-git" > /app/GIT_COMMIT
+RUN rm -rf .git
 
 COPY app/ ./app/
 COPY config/ ./config/
