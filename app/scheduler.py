@@ -63,8 +63,24 @@ class SchedulerService:
             name='Clean up expired subscriptions'
         )
 
+        # Engagement sessions cleanup at 2:00 AM
+        self.scheduler.add_job(
+            self.cleanup_engagement_sessions,
+            CronTrigger(hour=2, minute=0),
+            id='engagement_cleanup',
+            name='Clean up old engagement sessions'
+        )
+
+        # Auto-pause stale engagement sessions every hour
+        self.scheduler.add_job(
+            self.pause_stale_engagement_sessions,
+            CronTrigger(minute=30),
+            id='engagement_auto_pause',
+            name='Auto-pause stale engagement sessions'
+        )
+
         self.scheduler.start()
-        logger.info("Scheduler started with jobs: CRM planning, CRM dispatcher, metrics, subscription cleanup")
+        logger.info("Scheduler started with jobs: CRM planning, CRM dispatcher, metrics, subscription cleanup, engagement cleanup, engagement auto-pause")
 
     async def stop(self):
         if self.scheduler.running:
@@ -294,6 +310,36 @@ class SchedulerService:
 
         except Exception as e:
             logger.error(f"Error during subscription cleanup: {e}")
+
+    async def cleanup_engagement_sessions(self):
+        """Clean up old engagement sessions (older than 7 days)"""
+        logger.info("Starting engagement sessions cleanup")
+
+        try:
+            from app.services.engagement import EngagementManager
+
+            deleted_count = await EngagementManager.cleanup_old_sessions(days=7)
+
+            if deleted_count > 0:
+                logger.info(f"Cleaned up {deleted_count} old engagement sessions")
+
+        except Exception as e:
+            logger.error(f"Error during engagement sessions cleanup: {e}")
+
+    async def pause_stale_engagement_sessions(self):
+        """Auto-pause engagement sessions inactive for 24+ hours"""
+        logger.info("Starting auto-pause of stale engagement sessions")
+
+        try:
+            from app.services.engagement import EngagementManager
+
+            paused_count = await EngagementManager.auto_pause_stale_sessions(hours=24)
+
+            if paused_count > 0:
+                logger.info(f"Auto-paused {paused_count} stale engagement sessions")
+
+        except Exception as e:
+            logger.error(f"Error during engagement sessions auto-pause: {e}")
 
     # Manual trigger methods for testing
     async def trigger_daily_messages(self):

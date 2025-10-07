@@ -69,6 +69,13 @@ class CRMDispatcher:
                 # Mark task as sent
                 await AdminTaskModel.mark_sent(task_id)
 
+                # Create engagement session for daily messages
+                if task_type in ('DAILY_MSG_PROMPT', 'DAILY_MSG_PUSH'):
+                    from app.services.engagement import EngagementManager
+                    session_id = await EngagementManager.start_session(user_id)
+                    if session_id:
+                        logger.info(f"Started engagement session {session_id} for user {user_id} after daily message")
+
                 return 'sent'
 
             except Exception as send_error:

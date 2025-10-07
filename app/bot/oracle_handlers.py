@@ -13,6 +13,7 @@ from app.database.models import (
     UserModel, DailyMessageModel, OracleQuestionModel,
     SubscriptionModel, AdminTaskModel
 )
+from app.database.connection import db
 from app.services.persona import persona_factory, get_admin_response
 from app.bot.keyboards import get_main_menu, get_subscription_menu
 from app.bot.states import OnboardingStates, OracleQuestionStates
@@ -576,6 +577,18 @@ async def question_handler(message: types.Message, state: FSMContext):
             # ADMINISTRATOR MODE - ordinary text messages (FREE for everyone, NO counter)
             # Both subscribers and non-subscribers can chat freely via regular text
 
+            # Check for active engagement session
+            from app.services.engagement import EngagementManager
+            engagement_session = await EngagementManager.get_active_session(user['id'])
+
+            if engagement_session:
+                # Track user message in engagement session
+                await EngagementManager.track_message(
+                    engagement_session['id'],
+                    role='user',
+                    content=question
+                )
+
             # Show typing status while generating
             await message.bot.send_chat_action(chat_id=message.chat.id, action=ChatAction.TYPING)
 
@@ -598,6 +611,71 @@ async def question_handler(message: types.Message, state: FSMContext):
             # Simple response with Administrator emoji
             await message.answer(f"💬 {answer}")
 
+            # Track admin response in engagement session
+            if engagement_session:
+                await EngagementManager.track_message(
+                    engagement_session['id'],
+                    role='admin',
+                    content=answer
+                )
+
+                # Check engagement level and take action
+                engagement_level = await EngagementManager.check_engagement_level(engagement_session['id'])
+
+                # Only check engagement after at least 3 user messages to give user a chance
+                user_msg_count = await db.fetchval(
+                    "SELECT COUNT(*) FROM session_messages WHERE session_id = $1 AND role = 'user'",
+                    engagement_session['id']
+                )
+
+                if user_msg_count >= 3:  # Only evaluate after 3+ user messages
+                    if engagement_level == 'low':
+                        # Still low after 3+ messages - pause session
+                        await EngagementManager.pause_session(engagement_session['id'])
+                        logger.info(f"Engagement session {engagement_session['id']} paused due to low engagement")
+
+                if engagement_level == 'high':
+                    # 3+ messages - high engagement, transition to collecting if not already
+                    if engagement_session['status'] == 'engaging':
+                        await EngagementManager.transition_to_collecting(engagement_session['id'])
+                        logger.info(f"Engagement session {engagement_session['id']} transitioned to collecting")
+
+                elif engagement_level == 'ready_to_analyze':
+                    # 5-10 messages - ready to analyze and offer
+                    if await EngagementManager.should_analyze(engagement_session['id']):
+                        # Prepare user context for analysis
+                        analysis_context = {
+                            'age': user.get('age', 25),
+                            'gender': user.get('gender', 'other'),
+                            'archetype': user.get('archetype_primary', 'explorer')
+                        }
+
+                        # Analyze conversation and generate offer
+                        offer_data = await EngagementManager.analyze_and_offer(
+                            engagement_session['id'],
+                            analysis_context
+                        )
+
+                        if offer_data:
+                            # Send offer with button
+                            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+                            keyboard = InlineKeyboardMarkup(
+                                inline_keyboard=[[
+                                    InlineKeyboardButton(
+                                        text="🔮 Обратиться к Оракулу",
+                                        callback_data=f"ENGAGE_ORACLE_{engagement_session['id']}"
+                                    )
+                                ]]
+                            )
+
+                            await message.answer(
+                                offer_data['offer_message'],
+                                reply_markup=keyboard
+                            )
+
+                            logger.info(f"Sent Oracle offer for engagement session {engagement_session['id']}")
+
         await UserModel.update_last_seen(user['id'])
 
         # Create THANKS task for CRM
@@ -619,6 +697,203 @@ async def question_handler(message: types.Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Error in question handler: {e}")
         await message.answer("Произошла ошибка. Попробуйте позже.")
+
+# Callback handlers for engagement session Oracle offer
+@router.callback_query(F.data.startswith("ENGAGE_ORACLE_"))
+async def engagement_oracle_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Handle engagement session Oracle offer acceptance"""
+    try:
+        # Extract session_id from callback data
+        session_id = int(callback.data.replace("ENGAGE_ORACLE_", ""))
+
+        # Get session data
+        from app.services.engagement import EngagementManager
+        from app.database.connection import db
+
+        session = await db.fetchrow(
+            "SELECT * FROM engagement_sessions WHERE id = $1",
+            session_id
+        )
+
+        if not session:
+            await callback.answer("Сессия не найдена", show_alert=True)
+            return
+
+        # Get user
+        user = await UserModel.get_by_id(session['user_id'])
+        if not user:
+            await callback.answer("Пользователь не найден", show_alert=True)
+            return
+
+        # Mark session as converted
+        await EngagementManager.mark_converted(session_id)
+
+        # Get suggested question from session
+        suggested_question = session['suggested_question']
+
+        # Set Oracle question state with pre-filled question
+        await state.set_state(OracleQuestionStates.waiting_for_question)
+        await state.update_data(engagement_suggested_question=suggested_question)
+
+        # Check if user has active subscription
+        subscription = await SubscriptionModel.get_active_subscription(user['id'])
+
+        if subscription:
+            # Subscriber - direct to Oracle
+            oracle_used = await OracleQuestionModel.count_today_questions(user['id'], 'SUB')
+
+            if oracle_used >= 10:
+                await callback.answer("Лимит вопросов на сегодня исчерпан", show_alert=True)
+                await state.clear()
+                return
+
+            remaining = 10 - oracle_used
+
+            # Auto-send the suggested question to Oracle
+            await callback.message.answer(f"💬 Отлично! Я передаю Оракулу твой вопрос:\n\n_{suggested_question}_", parse_mode="Markdown")
+
+            # Show typing indicator
+            await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
+
+            user_context = {
+                'age': user.get('age'),
+                'gender': user.get('gender'),
+                'user_id': user['id'],
+                'archetype_primary': user.get('archetype_primary'),
+                'archetype_secondary': user.get('archetype_secondary')
+            }
+
+            oracle_msg = await callback.message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
+
+            full_answer = ""
+            display_text = "🔮 "
+            last_update = asyncio.get_event_loop().time()
+
+            async for chunk in call_oracle_ai_stream(suggested_question, user_context):
+                full_answer += chunk
+                display_text_with_answer = display_text + full_answer
+
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_update >= 0.5:
+                    try:
+                        await oracle_msg.edit_text(display_text_with_answer, parse_mode="Markdown")
+                        last_update = current_time
+                    except Exception:
+                        pass
+
+            # Final update with counter
+            final_text = display_text + full_answer
+
+            if remaining > 0:
+                final_text += f"\n\n_Осталось {remaining} вопрос{'ов' if remaining > 1 else ''} на сегодня._"
+            else:
+                final_text += f"\n\n_Лимит вопросов на сегодня исчерпан. Завтра будет новый день._"
+
+            await oracle_msg.edit_text(final_text, parse_mode="Markdown")
+
+            # Save question
+            await OracleQuestionModel.save_question(
+                user['id'], suggested_question, full_answer, source='ENGAGEMENT'
+            )
+
+            await state.clear()
+
+        else:
+            # Non-subscriber - check free questions
+            free_left = user.get('free_questions_left', 0)
+
+            if free_left <= 0:
+                from app.services.smart_messages import generate_system_message
+                user_context_sys = {
+                    'age': user.get('age', 25),
+                    'gender': user.get('gender', 'other'),
+                    'archetype_primary': user.get('archetype_primary', 'hero')
+                }
+                exhausted_message = await generate_system_message('free_exhausted', user_context_sys)
+
+                await callback.message.answer(
+                    f"{exhausted_message}\n\n💎 Получи подписку:",
+                    reply_markup=get_subscription_menu()
+                )
+                await state.clear()
+                return
+
+            # Auto-send the suggested question to Oracle (using free question)
+            await callback.message.answer(f"💬 Отлично! Я передаю Оракулу твой вопрос:\n\n_{suggested_question}_", parse_mode="Markdown")
+
+            # Show typing indicator
+            await callback.bot.send_chat_action(chat_id=callback.message.chat.id, action=ChatAction.TYPING)
+
+            user_context = {
+                'age': user.get('age'),
+                'gender': user.get('gender'),
+                'user_id': user['id'],
+                'archetype_primary': user.get('archetype_primary'),
+                'archetype_secondary': user.get('archetype_secondary')
+            }
+
+            oracle_msg = await callback.message.answer("🔮 **Оракул размышляет...**", parse_mode="Markdown")
+
+            full_answer = ""
+            display_text = "🔮 "
+            last_update = asyncio.get_event_loop().time()
+
+            async for chunk in call_oracle_ai_stream(suggested_question, user_context):
+                full_answer += chunk
+                display_text_with_answer = display_text + full_answer
+
+                current_time = asyncio.get_event_loop().time()
+                if current_time - last_update >= 0.5:
+                    try:
+                        await oracle_msg.edit_text(display_text_with_answer, parse_mode="Markdown")
+                        last_update = current_time
+                    except Exception:
+                        pass
+
+            # Use one free question
+            success = await UserModel.use_free_question(user['id'])
+            if not success:
+                persona = persona_factory(user)
+                await callback.message.answer(persona.wrap("упс, что-то пошло не так. попробуй ещё раз"))
+                await state.clear()
+                return
+
+            # Save question (track as ENGAGEMENT for analytics)
+            await OracleQuestionModel.save_question(
+                user['id'], suggested_question, full_answer, source='ENGAGEMENT'
+            )
+
+            remaining = free_left - 1
+            final_text = display_text + full_answer
+
+            if remaining > 0:
+                persona = persona_factory(user)
+                response = persona.format_free_remaining(remaining)
+                final_text += f"\n\n{response}"
+            else:
+                from app.services.smart_messages import generate_system_message
+                user_context_sys = {
+                    'age': user.get('age', 25),
+                    'gender': user.get('gender', 'other'),
+                    'archetype_primary': user.get('archetype_primary', 'hero')
+                }
+                response = await generate_system_message('free_exhausted', user_context_sys)
+                final_text += f"\n\n{response}\n\n💎 Получи подписку:"
+
+            await oracle_msg.edit_text(final_text, parse_mode="Markdown")
+
+            if remaining <= 0:
+                await callback.message.answer("💎", reply_markup=get_subscription_menu())
+
+            await state.clear()
+
+        await callback.answer("✅ Вопрос передан Оракулу!")
+
+        logger.info(f"Engagement session {session_id} converted - question sent to Oracle")
+
+    except Exception as e:
+        logger.error(f"Error in engagement oracle callback: {e}")
+        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
 
 # Callback handlers for subscription
 @router.callback_query(F.data.startswith("BUY_"))
