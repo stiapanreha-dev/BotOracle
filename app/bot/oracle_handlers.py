@@ -877,7 +877,9 @@ async def engagement_oracle_callback(callback: types.CallbackQuery, state: FSMCo
                 persona = persona_factory(user)
                 response = persona.format_free_remaining(remaining)
                 final_text += f"\n\n{response}"
+                await oracle_msg.edit_text(final_text, parse_mode="Markdown")
             else:
+                # Last free question used - show subscription offer
                 from app.services.smart_messages import generate_system_message
                 user_context_sys = {
                     'age': user.get('age', 25),
@@ -885,12 +887,15 @@ async def engagement_oracle_callback(callback: types.CallbackQuery, state: FSMCo
                     'archetype_primary': user.get('archetype_primary', 'hero')
                 }
                 response = await generate_system_message('free_exhausted', user_context_sys)
-                final_text += f"\n\n{response}\n\n💎 Получи подписку:"
 
-            await oracle_msg.edit_text(final_text, parse_mode="Markdown")
+                # Update Oracle message with answer only
+                await oracle_msg.edit_text(final_text, parse_mode="Markdown")
 
-            if remaining <= 0:
-                await callback.message.answer("💎", reply_markup=get_subscription_menu())
+                # Send subscription offer as separate message
+                await callback.message.answer(
+                    f"{response}\n\n💎 Получи подписку:",
+                    reply_markup=get_subscription_menu()
+                )
 
             await state.clear()
 
