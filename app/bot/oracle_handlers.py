@@ -577,9 +577,16 @@ async def question_handler(message: types.Message, state: FSMContext):
             # ADMINISTRATOR MODE - ordinary text messages (FREE for everyone, NO counter)
             # Both subscribers and non-subscribers can chat freely via regular text
 
-            # Check for active engagement session
+            # Check for active engagement session (or create new one)
             from app.services.engagement import EngagementManager
             engagement_session = await EngagementManager.get_active_session(user['id'])
+
+            # Create new session if none exists
+            if not engagement_session:
+                session_id = await EngagementManager.start_session(user['id'])
+                if session_id:
+                    engagement_session = await EngagementManager.get_active_session(user['id'])
+                    logger.info(f"Created new engagement session {session_id} for user {user['id']}")
 
             if engagement_session:
                 # Track user message in engagement session
