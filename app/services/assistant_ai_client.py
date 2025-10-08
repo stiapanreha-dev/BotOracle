@@ -60,12 +60,7 @@ async def log_api_request_as_curl(
         # Add headers
         if headers:
             for key, value in headers.items():
-                # Mask API key partially
-                if key.lower() == "authorization" and "Bearer" in value:
-                    masked_value = value[:20] + "..." + value[-10:] if len(value) > 30 else value
-                    curl_parts.append(f'-H "{key}: {masked_value}"')
-                else:
-                    curl_parts.append(f'-H "{key}: {value}"')
+                curl_parts.append(f'-H "{key}: {value}"')
 
         # Add data
         if data:
