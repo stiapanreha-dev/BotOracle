@@ -15,17 +15,17 @@ def build_address(age: Optional[int], gender: Optional[str]) -> str:
     """Build personalized address based on user demographics"""
     if gender == "female":
         if age and age <= 25:
-            return "солнышко"
+            return "Солнышко"
         else:
-            return "дорогая"
+            return "Дорогая"
     elif gender == "male":
         if age and age <= 25:
-            return "дружище"
+            return "Дружище"
         else:
-            return "уважаемый"
+            return "Уважаемый"
     else:
         # gender == "other" or None
-        return "друг"
+        return "Друг"
 
 def get_tone_for_user(age: Optional[int], gender: Optional[str]) -> str:
     """Determine communication tone based on demographics"""
