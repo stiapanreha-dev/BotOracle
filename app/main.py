@@ -141,8 +141,8 @@ async def webhook_handler(update: dict):
     global dp_instance, processed_updates
 
     # Log webhook receipt time
-    from datetime import datetime, timezone
-    webhook_received_at = datetime.now(timezone.utc)
+    from datetime import datetime
+    webhook_received_at = datetime.utcnow()
 
     if dp_instance:
         from aiogram.types import Update

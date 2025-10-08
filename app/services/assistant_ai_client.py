@@ -53,9 +53,9 @@ async def log_api_request_as_curl(
     Log OpenAI API request as curl command for easy reproduction
     """
     try:
-        # Capture exact timestamp when function is called
-        from datetime import datetime, timezone
-        request_timestamp = datetime.now(timezone.utc)
+        # Capture exact timestamp when function is called (naive datetime for PostgreSQL)
+        from datetime import datetime
+        request_timestamp = datetime.utcnow()
 
         # Build curl command
         curl_parts = [f"curl -X {method}"]
