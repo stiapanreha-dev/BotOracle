@@ -615,8 +615,8 @@ async def question_handler(message: types.Message, state: FSMContext):
                 user['id'], question, answer, source='CHAT_FREE'
             )
 
-            # Simple response with Administrator emoji
-            await message.answer(f"💬 {answer}")
+            # Simple response with Administrator emoji and main menu keyboard
+            await message.answer(f"💬 {answer}", reply_markup=get_main_menu(has_subscription=user['has_subscription']))
 
             # Track admin response in engagement session
             if engagement_session:
