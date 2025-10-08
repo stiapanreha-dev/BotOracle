@@ -133,14 +133,19 @@ async def shutdown_event():
 
 @app.post("/webhook")
 async def webhook_handler(update: dict):
-    """Handle incoming webhook updates"""
+    """Handle incoming webhook updates - responds immediately to prevent Telegram retries"""
     global dp_instance
 
     if dp_instance:
         from aiogram.types import Update
         telegram_update = Update(**update)
-        await dp_instance.feed_update(bot=bot_instance, update=telegram_update)
+        # Process update in background - don't wait for completion
+        # This prevents Telegram from retrying the same update
+        asyncio.create_task(
+            dp_instance.feed_update(bot=bot_instance, update=telegram_update)
+        )
 
+    # Return immediately to acknowledge webhook
     return {"status": "ok"}
 
 @app.get("/readme", response_class=HTMLResponse)
