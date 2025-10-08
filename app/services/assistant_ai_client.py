@@ -397,22 +397,38 @@ class AssistantAIClient:
 
     async def get_admin_response(self, question: str, user_context: Dict[str, Any]) -> str:
         """Generate Administrator persona response with context"""
+        request_start = time.time()
+        user_id = user_context.get('user_id', 'unknown')
+
+        logger.info(f"⏱️  [ADMIN] Request START for user {user_id}: '{question[:50]}...'")
+
         if not self.client or not self.admin_assistant_id:
             return await self._admin_stub(question)
 
         try:
             # Update instructions from DB on first use
+            step_start = time.time()
             await self._update_assistant_instructions_from_db('admin')
+            logger.info(f"⏱️  [ADMIN] Instructions updated in {time.time() - step_start:.2f}s")
 
-            user_id = user_context.get('user_id')
-            if not user_id:
+            if not user_id or user_id == 'unknown':
                 logger.error("user_id not provided in user_context")
                 return await self._admin_stub(question)
 
             # Get or create thread
+            step_start = time.time()
             thread_id = await self._get_or_create_thread(user_id, 'admin')
             if not thread_id:
                 return await self._admin_stub(question)
+
+            # Count messages in thread
+            try:
+                messages_list = self.client.beta.threads.messages.list(thread_id=thread_id, limit=100)
+                msg_count = len(messages_list.data)
+                logger.info(f"⏱️  [ADMIN] Thread {thread_id[:20]}... retrieved ({msg_count} messages) in {time.time() - step_start:.2f}s")
+            except Exception as e:
+                logger.warning(f"Could not count messages: {e}")
+                msg_count = "unknown"
 
             # Add context about user
             age = user_context.get('age', 25)
@@ -423,11 +439,13 @@ class AssistantAIClient:
             archetype_secondary = user_context.get('archetype_secondary')
 
             # Build contextualized message
+            step_start = time.time()
             context_prefix = await self._build_admin_context(
                 age, gender, has_subscription, free_chat,
                 archetype_primary, archetype_secondary
             )
             full_message = f"{context_prefix}\n\nВопрос пользователя: {question}"
+            logger.info(f"⏱️  [ADMIN] Context built ({len(full_message)} chars) in {time.time() - step_start:.2f}s")
 
             # Log the question and context
             prompt_logger.info("="*80)
@@ -447,28 +465,35 @@ class AssistantAIClient:
             prompt_logger.info("="*80 + "\n")
 
             # Check if there's an active run - cancel or wait for it
+            step_start = time.time()
             try:
                 runs = self.client.beta.threads.runs.list(thread_id=thread_id, limit=1)
                 if runs.data and runs.data[0].status in ['queued', 'in_progress']:
                     active_run = runs.data[0]
-                    logger.warning(f"Active run {active_run.id} detected, cancelling it")
+                    logger.warning(f"⚠️  [ADMIN] Active run {active_run.id} detected, cancelling it")
                     try:
                         self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=active_run.id)
                         # Wait a bit for cancellation
                         await asyncio.sleep(0.5)
+                        logger.info(f"⏱️  [ADMIN] Run cancelled in {time.time() - step_start:.2f}s")
                     except Exception as e:
                         logger.warning(f"Could not cancel run {active_run.id}: {e}")
+                else:
+                    logger.info(f"⏱️  [ADMIN] No active runs found ({time.time() - step_start:.2f}s)")
             except Exception as e:
                 logger.warning(f"Error checking for active runs: {e}")
 
             # Add message to thread
+            step_start = time.time()
             self.client.beta.threads.messages.create(
                 thread_id=thread_id,
                 role="user",
                 content=full_message
             )
+            logger.info(f"⏱️  [ADMIN] Message added to thread in {time.time() - step_start:.2f}s")
 
             # Run assistant with truncation to last 20 messages (prevents slowdown from long history)
+            step_start = time.time()
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
                 assistant_id=self.admin_assistant_id,
@@ -477,9 +502,13 @@ class AssistantAIClient:
                     "last_messages": 20
                 }
             )
+            logger.info(f"⏱️  [ADMIN] Run {run.id[:20]}... created with truncation_strategy(last_messages=20) in {time.time() - step_start:.2f}s")
 
             # Wait for completion
+            step_start = time.time()
+            logger.info(f"⏳ [ADMIN] Waiting for run completion...")
             response = await self._wait_for_run_completion(thread_id, run.id)
+            logger.info(f"⏱️  [ADMIN] Run completed in {time.time() - step_start:.2f}s")
 
             # Emergency fallback: if response is too long, truncate at last sentence
             if len(response) > 500:
@@ -496,9 +525,10 @@ class AssistantAIClient:
                     response = truncated + "..."
                 logger.warning(f"Admin response truncated from {len(response)} to {len(response)} chars")
 
-            logger.info(f"Admin assistant response: {len(response)} chars")
+            logger.info(f"✅ [ADMIN] Response received: {len(response)} chars")
 
             # Sync conversation to Oracle's thread for context sharing
+            step_start = time.time()
             await self._sync_conversation_to_thread(
                 user_id=user_id,
                 target_persona='oracle',
@@ -506,11 +536,16 @@ class AssistantAIClient:
                 question=question,
                 response=response
             )
+            logger.info(f"⏱️  [ADMIN] Cross-thread sync completed in {time.time() - step_start:.2f}s")
+
+            total_time = time.time() - request_start
+            logger.info(f"🏁 [ADMIN] Request COMPLETED in {total_time:.2f}s total")
 
             return response
 
         except Exception as e:
-            logger.error(f"Error getting admin assistant response: {e}")
+            total_time = time.time() - request_start
+            logger.error(f"❌ [ADMIN] Error after {total_time:.2f}s: {e}")
             return await self._admin_stub(question)
 
     async def get_oracle_response(self, question: str, user_context: Dict[str, Any]) -> str:
@@ -633,12 +668,22 @@ class AssistantAIClient:
     async def _wait_for_run_completion(self, thread_id: str, run_id: str, timeout: int = 120) -> str:
         """Wait for assistant run to complete and return response"""
         start_time = time.time()
+        last_status = None
+        poll_count = 0
 
         while time.time() - start_time < timeout:
+            poll_count += 1
+            elapsed = time.time() - start_time
+
             run = self.client.beta.threads.runs.retrieve(
                 thread_id=thread_id,
                 run_id=run_id
             )
+
+            # Log status changes or every 2 seconds
+            if run.status != last_status or poll_count % 4 == 0:  # 4 polls = ~2 seconds
+                logger.info(f"   📊 [Poll #{poll_count}] {elapsed:.1f}s - Status: {run.status}")
+                last_status = run.status
 
             if run.status == 'completed':
                 # Get messages
@@ -652,17 +697,20 @@ class AssistantAIClient:
                     # Extract text from message content
                     content = messages.data[0].content[0]
                     if hasattr(content, 'text'):
+                        logger.info(f"   ✅ Response extracted ({len(content.text.value)} chars)")
                         return content.text.value
 
+                logger.warning(f"   ⚠️  Completed but no text content found")
                 return "Ответ получен, но не удалось извлечь текст."
 
             elif run.status in ['failed', 'cancelled', 'expired']:
-                logger.error(f"Run {run_id} ended with status: {run.status}")
+                logger.error(f"   ❌ Run {run_id} ended with status: {run.status}")
                 raise Exception(f"Run failed with status: {run.status}")
 
             # Wait before next check
             await asyncio.sleep(0.5)
 
+        logger.error(f"   ⏰ TIMEOUT after {timeout}s (status was: {last_status})")
         raise TimeoutError(f"Run {run_id} did not complete within {timeout} seconds")
 
     async def _build_admin_context(self, age: int, gender: str, has_subscription: bool,
