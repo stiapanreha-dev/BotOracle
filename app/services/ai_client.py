@@ -83,6 +83,39 @@ class AIClient:
             logger.error(f"Error loading prompt from database: {e}")
             return None
 
+    async def _get_conversation_history(self, user_id: int, persona: str, limit: int = 20) -> list:
+        """Get recent conversation history from database"""
+        try:
+            rows = await db.fetch("""
+                SELECT role, content
+                FROM conversation_history
+                WHERE user_id = $1 AND persona = $2
+                ORDER BY created_at DESC
+                LIMIT $3
+            """, user_id, persona, limit)
+
+            # Reverse to chronological order
+            messages = []
+            for row in reversed(rows):
+                messages.append({
+                    "role": row['role'],
+                    "content": row['content']
+                })
+            return messages
+        except Exception as e:
+            logger.error(f"Error loading conversation history: {e}")
+            return []
+
+    async def _save_to_history(self, user_id: int, persona: str, role: str, content: str):
+        """Save message to conversation history"""
+        try:
+            await db.execute("""
+                INSERT INTO conversation_history (user_id, persona, role, content)
+                VALUES ($1, $2, $3, $4)
+            """, user_id, persona, role, content)
+        except Exception as e:
+            logger.error(f"Error saving to conversation history: {e}")
+
     async def get_admin_response(self, question: str, user_context: Dict[str, Any]) -> str:
         """Generate Administrator persona response - emotional, helpful, playful"""
         if not self.client:
@@ -96,23 +129,37 @@ class AIClient:
             free_chat = user_context.get('free_chat', False)
             archetype_primary = user_context.get('archetype_primary')
             archetype_secondary = user_context.get('archetype_secondary')
+            user_id = user_context.get('user_id')
 
             system_prompt = await self._build_admin_system_prompt(
                 age, gender, has_subscription, free_chat,
                 archetype_primary, archetype_secondary
             )
 
+            # Build messages with history
+            messages = [{"role": "system", "content": system_prompt}]
+
+            # Add conversation history if user_id available
+            if user_id:
+                history = await self._get_conversation_history(user_id, 'admin', limit=20)
+                messages.extend(history)
+
+            # Add current question
+            messages.append({"role": "user", "content": question})
+
             result = self.client.chat.completions.create(
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Пользователь спрашивает: {question}"}
-                ],
+                messages=messages,
                 temperature=0.8,
                 max_tokens=300  # Increased from 200 to allow more natural responses
             )
 
             response = result.choices[0].message.content.strip()
+
+            # Save to history
+            if user_id:
+                await self._save_to_history(user_id, 'admin', 'user', question)
+                await self._save_to_history(user_id, 'admin', 'assistant', response)
 
             # Emergency fallback: if response is too long, truncate at last sentence
             if len(response) > 500:
@@ -144,20 +191,34 @@ class AIClient:
         try:
             archetype_primary = user_context.get('archetype_primary')
             archetype_secondary = user_context.get('archetype_secondary')
+            user_id = user_context.get('user_id')
 
             system_prompt = await self._build_oracle_system_prompt(archetype_primary, archetype_secondary)
 
+            # Build messages with history
+            messages = [{"role": "system", "content": system_prompt}]
+
+            # Add conversation history if user_id available
+            if user_id:
+                history = await self._get_conversation_history(user_id, 'oracle', limit=20)
+                messages.extend(history)
+
+            # Add current question
+            messages.append({"role": "user", "content": question})
+
             result = self.client.chat.completions.create(
                 model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Вопрос для размышления: {question}"}
-                ],
+                messages=messages,
                 temperature=0.7,
                 max_tokens=400
             )
 
             response = result.choices[0].message.content.strip()
+
+            # Save to history
+            if user_id:
+                await self._save_to_history(user_id, 'oracle', 'user', question)
+                await self._save_to_history(user_id, 'oracle', 'assistant', response)
 
             # Oracle responses can be longer (max 800 chars for better context)
             if len(response) > 800:
