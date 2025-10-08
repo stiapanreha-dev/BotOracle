@@ -56,18 +56,21 @@ class AssistantAIClient:
                 try:
                     from httpx_socks import SyncProxyTransport
                     transport = SyncProxyTransport.from_url(socks5_proxy)
-                    http_client = httpx.Client(transport=transport, timeout=30.0)
+                    http_client = httpx.Client(transport=transport, timeout=120.0)
                     self.client = OpenAI(api_key=api_key, http_client=http_client)
                     logger.info("OpenAI client configured with SOCKS5 proxy successfully")
                 except ImportError:
                     logger.error("httpx_socks not installed, falling back to direct connection")
-                    self.client = OpenAI(api_key=api_key)
+                    http_client = httpx.Client(timeout=120.0)
+                    self.client = OpenAI(api_key=api_key, http_client=http_client)
                 except Exception as e:
                     logger.error(f"Error configuring SOCKS5 proxy: {e}, falling back to direct connection")
-                    self.client = OpenAI(api_key=api_key)
+                    http_client = httpx.Client(timeout=120.0)
+                    self.client = OpenAI(api_key=api_key, http_client=http_client)
             else:
                 logger.info("No SOCKS5 proxy configured, using direct connection")
-                self.client = OpenAI(api_key=api_key)
+                http_client = httpx.Client(timeout=120.0)
+                self.client = OpenAI(api_key=api_key, http_client=http_client)
 
             # Get or create assistants
             self.admin_assistant_id = self._get_or_create_admin_assistant()
@@ -589,7 +592,7 @@ class AssistantAIClient:
             yield response[i:i + chunk_size]
             await asyncio.sleep(0.05)  # Small delay to simulate streaming
 
-    async def _wait_for_run_completion(self, thread_id: str, run_id: str, timeout: int = 30) -> str:
+    async def _wait_for_run_completion(self, thread_id: str, run_id: str, timeout: int = 120) -> str:
         """Wait for assistant run to complete and return response"""
         start_time = time.time()
 

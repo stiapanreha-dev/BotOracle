@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.fsm.storage.memory import MemoryStorage
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
@@ -13,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 import markdown
 from pathlib import Path
+import aiohttp
 
 # Configure logging
 logging.basicConfig(
@@ -58,8 +60,12 @@ app.mount("/admin", StaticFiles(directory="app/static/admin", html=True), name="
 
 async def create_bot_app():
     """Create and configure bot application"""
-    # Initialize bot
-    bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+    # Create session with increased timeout for slow AI responses
+    timeout = aiohttp.ClientTimeout(total=180, connect=60, sock_read=180, sock_connect=60)
+    session = AiohttpSession(timeout=timeout)
+
+    # Initialize bot with custom session
+    bot = Bot(token=BOT_TOKEN, parse_mode="HTML", session=session)
 
     # Create dispatcher with FSM storage
     dp = Dispatcher(storage=MemoryStorage())
