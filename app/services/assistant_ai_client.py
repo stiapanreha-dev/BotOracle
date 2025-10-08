@@ -317,8 +317,55 @@ class AssistantAIClient:
 
         return fallback_prompt
 
+    async def _create_thread_summary(self, thread_id: str, last_n: int = 20) -> str:
+        """Create a summary of last N messages from thread"""
+        try:
+            messages = self.client.beta.threads.messages.list(
+                thread_id=thread_id,
+                limit=last_n,
+                order='desc'
+            )
+
+            if not messages.data:
+                return ""
+
+            # Reverse to chronological order
+            messages_list = list(reversed(messages.data))
+
+            # Format as conversation history
+            summary_parts = ["[История последних диалогов]"]
+
+            for msg in messages_list:
+                role = "Пользователь" if msg.role == "user" else "Ассистент"
+                content = ""
+                if msg.content and len(msg.content) > 0:
+                    if hasattr(msg.content[0], 'text'):
+                        content = msg.content[0].text.value
+                        # Truncate long messages
+                        if len(content) > 200:
+                            content = content[:200] + "..."
+
+                # Skip context messages (those starting with КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ)
+                if content.startswith("КОНТЕКСТ ПОЛЬЗОВАТЕЛЯ"):
+                    # Extract only the question part
+                    if "Вопрос пользователя:" in content:
+                        content = content.split("Вопрос пользователя:")[1].strip()
+
+                # Skip sync messages
+                if content.startswith("[Контекст из диалога"):
+                    continue
+
+                if content:
+                    summary_parts.append(f"{role}: {content}")
+
+            return "\n".join(summary_parts)
+
+        except Exception as e:
+            logger.warning(f"Failed to create thread summary: {e}")
+            return ""
+
     async def _get_or_create_thread(self, user_id: int, persona: str) -> Optional[str]:
-        """Get existing thread_id or create new thread for user"""
+        """Get existing thread_id or create new thread for user with automatic rotation"""
         if not self.client:
             return None
 
@@ -335,8 +382,53 @@ class AssistantAIClient:
                 # Verify thread exists
                 try:
                     self.client.beta.threads.retrieve(thread_id)
-                    logger.debug(f"Using existing thread {thread_id} for user {user_id}, persona {persona}")
+
+                    # Check message count for rotation
+                    messages = self.client.beta.threads.messages.list(thread_id=thread_id, limit=100)
+                    msg_count = len(messages.data)
+
+                    # Rotate if more than 40 messages
+                    if msg_count >= 40:
+                        rotation_start = time.time()
+                        logger.info(f"🔄 Thread {thread_id[:20]}... has {msg_count} messages, rotating...")
+
+                        # Create summary of last 20 messages
+                        step_start = time.time()
+                        summary = await self._create_thread_summary(thread_id, last_n=20)
+                        logger.info(f"   📝 Summary created in {time.time() - step_start:.2f}s ({len(summary)} chars)")
+
+                        # Create new thread
+                        step_start = time.time()
+                        new_thread = self.client.beta.threads.create()
+                        new_thread_id = new_thread.id
+                        logger.info(f"   🆕 New thread created in {time.time() - step_start:.2f}s")
+
+                        # Add summary as first message if available
+                        if summary:
+                            step_start = time.time()
+                            self.client.beta.threads.messages.create(
+                                thread_id=new_thread_id,
+                                role="assistant",
+                                content=summary
+                            )
+                            logger.info(f"   💾 Summary added to new thread in {time.time() - step_start:.2f}s")
+
+                        # Save new thread_id to database
+                        step_start = time.time()
+                        await db.execute(
+                            f"UPDATE users SET {column} = $1 WHERE id = $2",
+                            new_thread_id, user_id
+                        )
+                        logger.info(f"   💿 Thread ID saved to DB in {time.time() - step_start:.2f}s")
+
+                        total_rotation = time.time() - rotation_start
+                        logger.info(f"✅ Thread rotation completed in {total_rotation:.2f}s total")
+
+                        return new_thread_id
+
+                    logger.debug(f"Using existing thread {thread_id} for user {user_id}, persona {persona} ({msg_count} messages)")
                     return thread_id
+
                 except Exception as e:
                     logger.warning(f"Thread {thread_id} not found: {e}, creating new one")
 
