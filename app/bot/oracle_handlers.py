@@ -287,7 +287,7 @@ async def oracle_question_button_handler(message: types.Message, state: FSMConte
         logger.error(f"Error in oracle question button handler: {e}")
         await message.answer("Произошла ошибка. Попробуйте позже.")
 
-@router.message(lambda message: message.text and not message.text.startswith('/') and message.text not in ["🌙 Шепот дня", "💎 Подписка", "ℹ️ Мой статус", "🔮 Задать вопрос Оракулу"])
+@router.message(lambda message: message.text and not message.text.startswith('/') and message.text not in ["🌙 Шепот дня", "💎 Подписка", "ℹ️ Мой статус", "🔮 Задать вопрос Оракулу"] and not message.from_user.is_bot)
 async def question_handler(message: types.Message, state: FSMContext):
     """Handle all text questions - route to Administrator or Oracle based on FSM state"""
     try:
