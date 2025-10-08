@@ -1,13 +1,13 @@
 """
 Admin API endpoints for viewing OpenAI API request logs
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import Optional, List
 from pydantic import BaseModel
 from datetime import datetime
 
 from app.database.connection import db
-from app.api.admin.auth import admin_required
+from app.api.admin.auth import verify_admin_token
 
 router = APIRouter()
 
@@ -25,12 +25,13 @@ class APILogResponse(BaseModel):
     metadata: Optional[dict]
 
 
-@router.get("/admin/api-logs", dependencies=[admin_required])
+@router.get("/admin/api-logs")
 async def get_api_logs(
     limit: int = Query(50, ge=1, le=500),
     operation: Optional[str] = None,
     user_id: Optional[int] = None,
-    persona: Optional[str] = None
+    persona: Optional[str] = None,
+    _: bool = Depends(verify_admin_token)
 ):
     """
     Get recent OpenAI API request logs with curl commands
@@ -105,8 +106,11 @@ async def get_api_logs(
         raise HTTPException(status_code=500, detail=f"Error fetching API logs: {str(e)}")
 
 
-@router.get("/admin/api-logs/{log_id}", dependencies=[admin_required])
-async def get_api_log(log_id: int):
+@router.get("/admin/api-logs/{log_id}")
+async def get_api_log(
+    log_id: int,
+    _: bool = Depends(verify_admin_token)
+):
     """
     Get single API log by ID with full curl command
     """
@@ -139,8 +143,11 @@ async def get_api_log(log_id: int):
         raise HTTPException(status_code=500, detail=f"Error fetching API log: {str(e)}")
 
 
-@router.delete("/admin/api-logs/cleanup", dependencies=[admin_required])
-async def cleanup_old_logs(days: int = Query(7, ge=1, le=365)):
+@router.delete("/admin/api-logs/cleanup")
+async def cleanup_old_logs(
+    days: int = Query(7, ge=1, le=365),
+    _: bool = Depends(verify_admin_token)
+):
     """
     Delete API logs older than specified days
     """
