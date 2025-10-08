@@ -20,7 +20,12 @@ prompt_logger.setLevel(logging.INFO)
 
 # Create file handler for prompts (if not already exists)
 if not prompt_logger.handlers:
-    prompt_handler = logging.FileHandler('/app/logs/prompts.log')
+    # Use relative path for local dev, /app/logs for Docker
+    log_dir = '/app/logs' if os.path.exists('/app') else 'logs'
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, 'prompts.log')
+
+    prompt_handler = logging.FileHandler(log_file)
     prompt_handler.setLevel(logging.INFO)
     prompt_formatter = logging.Formatter(
         '%(asctime)s - %(message)s',

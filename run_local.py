@@ -33,6 +33,10 @@ async def main():
     # Import scheduler
     from app.scheduler import init_scheduler
 
+    # Import DefaultBotProperties for aiogram 3.7+
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
     BOT_TOKEN = os.getenv("BOT_TOKEN")
 
     logger.info("🤖 Bot Oracle starting in LOCAL MODE...")
@@ -45,8 +49,8 @@ async def main():
     await db.connect()
     logger.info("Database connected")
 
-    # Initialize bot
-    bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
+    # Initialize bot (aiogram 3.7+ syntax)
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     # Create dispatcher with FSM storage
     dp = Dispatcher(storage=MemoryStorage())
