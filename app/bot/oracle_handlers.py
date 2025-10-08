@@ -953,16 +953,21 @@ async def buy_subscription_callback(callback: types.CallbackQuery):
 async def admin_panel_handler(message: types.Message):
     """Open admin panel for authorized admins"""
     from app.config import config
+    import os
 
     if message.from_user.id not in config.ADMIN_IDS:
         await message.answer("⛔️ Эта команда доступна только администраторам")
         return
 
+    # Use BASE_URL from env or default to Railway
+    base_url = os.getenv("BASE_URL", "https://botoracle-production.up.railway.app")
+    admin_url = f"{base_url}/admin/"
+
     keyboard = types.InlineKeyboardMarkup(
         inline_keyboard=[[
             types.InlineKeyboardButton(
                 text="📊 Открыть админ-панель",
-                web_app=types.WebAppInfo(url="https://consultant.sh3.su/admin/")
+                web_app=types.WebAppInfo(url=admin_url)
             )
         ]]
     )
