@@ -422,26 +422,45 @@ class AssistantAIClient:
 
     async def _get_or_create_thread(self, user_id: int, persona: str) -> Optional[str]:
         """Get existing thread_id or create new thread for user with automatic rotation"""
+        func_start = time.time()
+        logger.info(f"🔍 [_get_or_create_thread] ENTRY - user_id={user_id}, persona={persona}")
+
         if not self.client:
+            logger.info(f"🔍 [_get_or_create_thread] No client, returning None")
             return None
 
         try:
             # Get thread_id from database
             column = f"{persona}_thread_id"
+
+            db_start = time.time()
+            logger.info(f"🔍 [_get_or_create_thread] DB query START")
             row = await db.fetchrow(
                 f"SELECT {column} FROM users WHERE id = $1",
                 user_id
             )
+            db_time = time.time() - db_start
+            logger.info(f"🔍 [_get_or_create_thread] DB query END in {db_time:.3f}s - result: {row[column] if row and row[column] else 'None'}")
 
             if row and row[column]:
                 thread_id = row[column]
+                logger.info(f"🔍 [_get_or_create_thread] Found existing thread_id: {thread_id[:20]}...")
+
                 # Verify thread exists
                 try:
+                    retrieve_start = time.time()
+                    logger.info(f"🔍 [_get_or_create_thread] OpenAI threads.retrieve() START for {thread_id[:20]}...")
                     self.client.beta.threads.retrieve(thread_id)
+                    retrieve_time = time.time() - retrieve_start
+                    logger.info(f"🔍 [_get_or_create_thread] OpenAI threads.retrieve() END in {retrieve_time:.3f}s")
 
                     # Check message count for rotation
+                    list_start = time.time()
+                    logger.info(f"🔍 [_get_or_create_thread] OpenAI messages.list() START for {thread_id[:20]}...")
                     messages = self.client.beta.threads.messages.list(thread_id=thread_id, limit=100)
+                    list_time = time.time() - list_start
                     msg_count = len(messages.data)
+                    logger.info(f"🔍 [_get_or_create_thread] OpenAI messages.list() END in {list_time:.3f}s - found {msg_count} messages")
 
                     # Rotate if more than 40 messages
                     if msg_count >= 40:
@@ -478,31 +497,44 @@ class AssistantAIClient:
                         logger.info(f"   💿 Thread ID saved to DB in {time.time() - step_start:.2f}s")
 
                         total_rotation = time.time() - rotation_start
+                        func_total = time.time() - func_start
                         logger.info(f"✅ Thread rotation completed in {total_rotation:.2f}s total")
+                        logger.info(f"🔍 [_get_or_create_thread] EXIT (after rotation) in {func_total:.3f}s")
 
                         return new_thread_id
 
-                    logger.debug(f"Using existing thread {thread_id} for user {user_id}, persona {persona} ({msg_count} messages)")
+                    func_total = time.time() - func_start
+                    logger.info(f"🔍 [_get_or_create_thread] EXIT (existing thread, {msg_count} messages) in {func_total:.3f}s")
                     return thread_id
 
                 except Exception as e:
                     logger.warning(f"Thread {thread_id} not found: {e}, creating new one")
 
             # Create new thread
+            create_start = time.time()
+            logger.info(f"🔍 [_get_or_create_thread] Creating NEW thread via OpenAI...")
             thread = self.client.beta.threads.create()
             thread_id = thread.id
+            create_time = time.time() - create_start
+            logger.info(f"🔍 [_get_or_create_thread] New thread created in {create_time:.3f}s: {thread_id[:20]}...")
 
             # Save to database
+            save_start = time.time()
+            logger.info(f"🔍 [_get_or_create_thread] Saving new thread_id to DB...")
             await db.execute(
                 f"UPDATE users SET {column} = $1 WHERE id = $2",
                 thread_id, user_id
             )
+            save_time = time.time() - save_start
+            logger.info(f"🔍 [_get_or_create_thread] Thread_id saved to DB in {save_time:.3f}s")
 
-            logger.info(f"Created new thread {thread_id} for user {user_id}, persona {persona}")
+            func_total = time.time() - func_start
+            logger.info(f"🔍 [_get_or_create_thread] EXIT (new thread created) in {func_total:.3f}s")
             return thread_id
 
         except Exception as e:
-            logger.error(f"Error getting/creating thread: {e}")
+            func_total = time.time() - func_start
+            logger.error(f"🔍 [_get_or_create_thread] ERROR after {func_total:.3f}s: {e}")
             return None
 
     async def _sync_conversation_to_thread(self, user_id: int, target_persona: str,
