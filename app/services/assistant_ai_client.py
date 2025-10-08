@@ -468,10 +468,14 @@ class AssistantAIClient:
                 content=full_message
             )
 
-            # Run assistant
+            # Run assistant with truncation to last 20 messages (prevents slowdown from long history)
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
-                assistant_id=self.admin_assistant_id
+                assistant_id=self.admin_assistant_id,
+                truncation_strategy={
+                    "type": "last_messages",
+                    "last_messages": 20
+                }
             )
 
             # Wait for completion
@@ -576,10 +580,14 @@ class AssistantAIClient:
                 content=oracle_message
             )
 
-            # Run assistant
+            # Run assistant with truncation to last 20 messages (prevents slowdown from long history)
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
-                assistant_id=self.oracle_assistant_id
+                assistant_id=self.oracle_assistant_id,
+                truncation_strategy={
+                    "type": "last_messages",
+                    "last_messages": 20
+                }
             )
 
             # Wait for completion
