@@ -53,6 +53,10 @@ async def log_api_request_as_curl(
     Log OpenAI API request as curl command for easy reproduction
     """
     try:
+        # Capture exact timestamp when function is called
+        from datetime import datetime, timezone
+        request_timestamp = datetime.now(timezone.utc)
+
         # Build curl command
         curl_parts = [f"curl -X {method}"]
         curl_parts.append(f'"{url}"')
@@ -71,16 +75,16 @@ async def log_api_request_as_curl(
 
         curl_command = " \\\n  ".join(curl_parts)
 
-        # Log to database
+        # Log to database with explicit timestamp
         await db.execute("""
             INSERT INTO api_request_logs
-            (user_id, persona, operation, curl_command, response_status, response_time_ms, error_message, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        """, user_id, persona, operation, curl_command, response_status, response_time_ms, error_message,
+            (created_at, user_id, persona, operation, curl_command, response_status, response_time_ms, error_message, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        """, request_timestamp, user_id, persona, operation, curl_command, response_status, response_time_ms, error_message,
         json.dumps(metadata) if metadata else None)
 
-        # Also log to console for immediate visibility
-        logger.info(f"📋 [CURL] {operation}:")
+        # Also log to console for immediate visibility with timestamp
+        logger.info(f"📋 [CURL] {operation} at {request_timestamp.strftime('%H:%M:%S.%f')[:-3]}:")
         logger.info(f"{curl_command}")
 
     except Exception as e:

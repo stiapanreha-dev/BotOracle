@@ -140,10 +140,21 @@ async def webhook_handler(update: dict):
     """Handle incoming webhook updates - responds immediately to prevent Telegram retries"""
     global dp_instance, processed_updates
 
+    # Log webhook receipt time
+    from datetime import datetime, timezone
+    webhook_received_at = datetime.now(timezone.utc)
+
     if dp_instance:
         from aiogram.types import Update
         telegram_update = Update(**update)
         update_id = telegram_update.update_id
+
+        # Extract message text for logging
+        message_text = ""
+        if hasattr(telegram_update, 'message') and telegram_update.message:
+            message_text = telegram_update.message.text or ""
+
+        logger.info(f"📥 Webhook received at {webhook_received_at.strftime('%H:%M:%S.%f')[:-3]} - update_id={update_id}, text='{message_text[:30]}'")
 
         # Check if already processed (Telegram retry)
         if update_id in processed_updates:
