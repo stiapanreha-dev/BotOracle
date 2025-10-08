@@ -615,8 +615,20 @@ async def question_handler(message: types.Message, state: FSMContext):
                 user['id'], question, answer, source='CHAT_FREE'
             )
 
+            # Check if Leia suggests Oracle in her response
+            oracle_keywords = ["оракул", "передам", "доверим", "глубже", "философ"]
+            suggests_oracle = any(keyword in answer.lower() for keyword in oracle_keywords)
+
             # Simple response with Administrator emoji
-            await message.answer(f"💬 {answer}")
+            if suggests_oracle:
+                # Add inline button to ask Oracle
+                from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔮 Да, хочу спросить Оракула", callback_data="ASK_ORACLE")]
+                ])
+                await message.answer(f"💬 {answer}", reply_markup=keyboard)
+            else:
+                await message.answer(f"💬 {answer}")
 
             # Track admin response in engagement session
             if engagement_session:
@@ -905,6 +917,55 @@ async def engagement_oracle_callback(callback: types.CallbackQuery, state: FSMCo
 
     except Exception as e:
         logger.error(f"Error in engagement oracle callback: {e}")
+        await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
+
+# Callback handler for ASK_ORACLE button
+@router.callback_query(F.data == "ASK_ORACLE")
+async def ask_oracle_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Handle 'Ask Oracle' button - set state to wait for Oracle question"""
+    try:
+        await callback.answer()
+
+        user = await UserModel.get_by_tg_id(callback.from_user.id)
+        if not user:
+            await callback.message.answer("Напиши /start чтобы начать!")
+            return
+
+        # Check subscription
+        subscription = await SubscriptionModel.get_active_subscription(user['id'])
+
+        if subscription:
+            # Has subscription - directly ask for question
+            await callback.message.answer("💬 Отлично! Задай свой вопрос Оракулу:")
+            await state.set_state(OracleQuestionStates.waiting_for_question)
+        else:
+            # No subscription - check free questions
+            free_left = user.get('free_questions_left', 0)
+
+            if free_left > 0:
+                # Has free questions
+                await callback.message.answer(f"💬 Хорошо! У тебя осталось {free_left} бесплатных вопросов. Задай свой вопрос:")
+                await state.set_state(OracleQuestionStates.waiting_for_question)
+            else:
+                # No free questions - show subscription
+                from app.services.smart_messages import generate_system_message
+                user_context = {
+                    'age': user.get('age', 25),
+                    'gender': user.get('gender', 'other'),
+                    'archetype_primary': user.get('archetype_primary'),
+                    'archetype_secondary': user.get('archetype_secondary')
+                }
+
+                message_text = await generate_system_message(
+                    key='no_free_questions',
+                    user_context=user_context,
+                    fallback="У тебя закончились бесплатные вопросы 😔\n\nОформи подписку, чтобы получить доступ к мудрости Оракула:"
+                )
+
+                from app.bot.keyboards import get_subscription_menu
+                await callback.message.answer(message_text, reply_markup=get_subscription_menu())
+    except Exception as e:
+        logger.error(f"Error in ask_oracle_callback: {e}")
         await callback.answer("Произошла ошибка. Попробуйте позже.", show_alert=True)
 
 # Callback handlers for subscription
