@@ -4,6 +4,7 @@ Stateful conversations with server-side context management
 """
 import os
 import logging
+import json
 from typing import Dict, Any, Optional, AsyncGenerator
 from openai import OpenAI
 import httpx
@@ -33,6 +34,62 @@ if not prompt_logger.handlers:
     )
     prompt_handler.setFormatter(prompt_formatter)
     prompt_logger.addHandler(prompt_handler)
+
+
+async def log_api_request_as_curl(
+    operation: str,
+    method: str,
+    url: str,
+    headers: Dict[str, str] = None,
+    data: Dict = None,
+    user_id: int = None,
+    persona: str = None,
+    response_status: int = None,
+    response_time_ms: int = None,
+    error_message: str = None,
+    metadata: Dict = None
+):
+    """
+    Log OpenAI API request as curl command for easy reproduction
+    """
+    try:
+        # Build curl command
+        curl_parts = [f"curl -X {method}"]
+        curl_parts.append(f'"{url}"')
+
+        # Add headers
+        if headers:
+            for key, value in headers.items():
+                # Mask API key partially
+                if key.lower() == "authorization" and "Bearer" in value:
+                    masked_value = value[:20] + "..." + value[-10:] if len(value) > 30 else value
+                    curl_parts.append(f'-H "{key}: {masked_value}"')
+                else:
+                    curl_parts.append(f'-H "{key}: {value}"')
+
+        # Add data
+        if data:
+            json_data = json.dumps(data, ensure_ascii=False, indent=2)
+            # Escape single quotes for shell
+            json_data_escaped = json_data.replace("'", "'\\''")
+            curl_parts.append(f"-d '{json_data_escaped}'")
+
+        curl_command = " \\\n  ".join(curl_parts)
+
+        # Log to database
+        await db.execute("""
+            INSERT INTO api_request_logs
+            (user_id, persona, operation, curl_command, response_status, response_time_ms, error_message, metadata)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        """, user_id, persona, operation, curl_command, response_status, response_time_ms, error_message,
+        json.dumps(metadata) if metadata else None)
+
+        # Also log to console for immediate visibility
+        logger.info(f"📋 [CURL] {operation}:")
+        logger.info(f"{curl_command}")
+
+    except Exception as e:
+        logger.warning(f"Failed to log API request: {e}")
 
 
 class AssistantAIClient:
@@ -577,15 +634,58 @@ class AssistantAIClient:
 
             # Add message to thread
             step_start = time.time()
+
+            # Log curl command for debugging
+            api_key = os.getenv("OPENAI_API_KEY", "")
+            await log_api_request_as_curl(
+                operation="add_message",
+                method="POST",
+                url=f"https://api.openai.com/v1/threads/{thread_id}/messages",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "OpenAI-Beta": "assistants=v2"
+                },
+                data={"role": "user", "content": full_message},
+                user_id=user_id,
+                persona='admin',
+                metadata={"thread_id": thread_id}
+            )
+
             self.client.beta.threads.messages.create(
                 thread_id=thread_id,
                 role="user",
                 content=full_message
             )
+
+            response_time_ms = int((time.time() - step_start) * 1000)
             logger.info(f"⏱️  [ADMIN] Message added to thread in {time.time() - step_start:.2f}s")
 
             # Run assistant with truncation to last 20 messages (prevents slowdown from long history)
             step_start = time.time()
+
+            # Log curl command for debugging
+            await log_api_request_as_curl(
+                operation="create_run",
+                method="POST",
+                url=f"https://api.openai.com/v1/threads/{thread_id}/runs",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "OpenAI-Beta": "assistants=v2"
+                },
+                data={
+                    "assistant_id": self.admin_assistant_id,
+                    "truncation_strategy": {
+                        "type": "last_messages",
+                        "last_messages": 20
+                    }
+                },
+                user_id=user_id,
+                persona='admin',
+                metadata={"thread_id": thread_id, "assistant_id": self.admin_assistant_id}
+            )
+
             run = self.client.beta.threads.runs.create(
                 thread_id=thread_id,
                 assistant_id=self.admin_assistant_id,
