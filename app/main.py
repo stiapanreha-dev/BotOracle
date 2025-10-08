@@ -82,6 +82,10 @@ async def create_bot_app():
 bot_instance = None
 dp_instance = None
 
+# Track processed update IDs to prevent duplicates
+processed_updates = set()
+MAX_PROCESSED_CACHE = 1000  # Prevent memory leak
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize bot and scheduler on app startup"""
@@ -134,11 +138,27 @@ async def shutdown_event():
 @app.post("/webhook")
 async def webhook_handler(update: dict):
     """Handle incoming webhook updates - responds immediately to prevent Telegram retries"""
-    global dp_instance
+    global dp_instance, processed_updates
 
     if dp_instance:
         from aiogram.types import Update
         telegram_update = Update(**update)
+        update_id = telegram_update.update_id
+
+        # Check if already processed (Telegram retry)
+        if update_id in processed_updates:
+            logger.info(f"Duplicate update {update_id} ignored (Telegram retry)")
+            return {"status": "ok"}
+
+        # Mark as processed
+        processed_updates.add(update_id)
+
+        # Limit cache size to prevent memory leak
+        if len(processed_updates) > MAX_PROCESSED_CACHE:
+            # Remove oldest half
+            processed_updates.clear()
+            logger.info(f"Cleared processed updates cache")
+
         # Process update in background - don't wait for completion
         # This prevents Telegram from retrying the same update
         asyncio.create_task(
