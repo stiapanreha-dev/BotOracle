@@ -446,6 +446,21 @@ class AssistantAIClient:
             prompt_logger.info(full_message)
             prompt_logger.info("="*80 + "\n")
 
+            # Check if there's an active run - cancel or wait for it
+            try:
+                runs = self.client.beta.threads.runs.list(thread_id=thread_id, limit=1)
+                if runs.data and runs.data[0].status in ['queued', 'in_progress']:
+                    active_run = runs.data[0]
+                    logger.warning(f"Active run {active_run.id} detected, cancelling it")
+                    try:
+                        self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=active_run.id)
+                        # Wait a bit for cancellation
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.warning(f"Could not cancel run {active_run.id}: {e}")
+            except Exception as e:
+                logger.warning(f"Error checking for active runs: {e}")
+
             # Add message to thread
             self.client.beta.threads.messages.create(
                 thread_id=thread_id,
@@ -538,6 +553,21 @@ class AssistantAIClient:
             prompt_logger.info(f"Full message sent to AI:")
             prompt_logger.info(oracle_message)
             prompt_logger.info("="*80 + "\n")
+
+            # Check if there's an active run - cancel or wait for it
+            try:
+                runs = self.client.beta.threads.runs.list(thread_id=thread_id, limit=1)
+                if runs.data and runs.data[0].status in ['queued', 'in_progress']:
+                    active_run = runs.data[0]
+                    logger.warning(f"Active Oracle run {active_run.id} detected, cancelling it")
+                    try:
+                        self.client.beta.threads.runs.cancel(thread_id=thread_id, run_id=active_run.id)
+                        # Wait a bit for cancellation
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.warning(f"Could not cancel Oracle run {active_run.id}: {e}")
+            except Exception as e:
+                logger.warning(f"Error checking for active Oracle runs: {e}")
 
             # Add message to thread
             self.client.beta.threads.messages.create(
