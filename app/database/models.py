@@ -776,6 +776,19 @@ class CadenceManager:
             user_id
         )
 
+        # Cancel pending FAREWELL tasks (if any)
+        if old_level > 1:
+            await db.execute(
+                """
+                UPDATE admin_tasks
+                SET status = 'cancelled', updated_at = now()
+                WHERE user_id = $1
+                AND status IN ('scheduled', 'due', 'pending')
+                AND type = 'FAREWELL'
+                """,
+                user_id
+            )
+
         # Log restoration if level changed
         if old_level > 1:
             await EventModel.log_event(
