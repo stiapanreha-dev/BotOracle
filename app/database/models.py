@@ -683,3 +683,179 @@ class OnboardingModel:
         return count or 0
 
 
+class CadenceManager:
+    """Manages adaptive CRM cadence levels (1=Normal, 2=Reduced, 3=Stopped)"""
+
+    @staticmethod
+    async def get_cadence_level(user_id: int) -> int:
+        """Get current cadence level for user (1, 2, or 3)"""
+        level = await db.fetchval(
+            "SELECT crm_cadence_level FROM users WHERE id = $1",
+            user_id
+        )
+        return level or 1
+
+    @staticmethod
+    async def update_cadence_level(user_id: int) -> int:
+        """
+        Calculate and update cadence level based on last_crm_response_at.
+        Level 1 (Normal): < 2 days without response
+        Level 2 (Reduced): 2-13 days without response
+        Level 3 (Stopped): 14+ days without response
+        Returns new level.
+        """
+        user = await db.fetchrow(
+            "SELECT id, crm_cadence_level, last_crm_response_at FROM users WHERE id = $1",
+            user_id
+        )
+
+        if not user:
+            return 1
+
+        last_response = user['last_crm_response_at']
+        old_level = user['crm_cadence_level'] or 1
+
+        # Default to Level 1 if never responded to CRM
+        if not last_response:
+            new_level = 1
+        else:
+            # Calculate days since last CRM response
+            from datetime import datetime
+            days_since = (datetime.now() - last_response).days
+
+            if days_since >= 14:
+                new_level = 3  # STOPPED
+            elif days_since >= 2:
+                new_level = 2  # REDUCED
+            else:
+                new_level = 1  # NORMAL
+
+        # Update level if changed
+        if new_level != old_level:
+            await db.execute(
+                "UPDATE users SET crm_cadence_level = $1 WHERE id = $2",
+                new_level, user_id
+            )
+
+            await EventModel.log_event(
+                user_id=user_id,
+                event_type='cadence_level_changed',
+                meta={'from_level': old_level, 'to_level': new_level}
+            )
+
+            logger.info(f"User {user_id} cadence level changed: {old_level} → {new_level}")
+
+            # If transitioning to Level 3, stop cadence completely
+            if new_level == 3 and old_level < 3:
+                await CadenceManager.stop_cadence(user_id, 'no_response_14d')
+
+        return new_level
+
+    @staticmethod
+    async def track_crm_response(user_id: int):
+        """
+        Track that user responded to CRM contact.
+        Updates last_crm_response_at and restores to Level 1 if needed.
+        """
+        user = await db.fetchrow(
+            "SELECT crm_cadence_level FROM users WHERE id = $1",
+            user_id
+        )
+
+        old_level = user['crm_cadence_level'] if user else 1
+
+        # Update response time and restore to Level 1
+        await db.execute(
+            """
+            UPDATE users
+            SET last_crm_response_at = now(),
+                crm_cadence_level = 1,
+                crm_stopped_reason = NULL
+            WHERE id = $1
+            """,
+            user_id
+        )
+
+        # Log restoration if level changed
+        if old_level > 1:
+            await EventModel.log_event(
+                user_id=user_id,
+                event_type='cadence_level_restored',
+                meta={'from_level': old_level, 'to_level': 1}
+            )
+
+            logger.info(f"User {user_id} re-engaged! Cadence restored from Level {old_level} to Level 1")
+
+    @staticmethod
+    async def is_response_to_crm(user_id: int) -> bool:
+        """
+        Check if there was a CRM contact sent within last 48 hours.
+        Used to determine if user message is a response to CRM.
+        """
+        last_crm = await db.fetchrow(
+            """
+            SELECT sent_at FROM admin_tasks
+            WHERE user_id = $1
+            AND status = 'sent'
+            AND type IN ('PING', 'NUDGE_SUB', 'DAILY_MSG_PROMPT', 'RECOVERY', 'LIMIT_INFO')
+            ORDER BY sent_at DESC
+            LIMIT 1
+            """,
+            user_id
+        )
+
+        if not last_crm or not last_crm['sent_at']:
+            return False
+
+        # Check if within 48 hours
+        from datetime import datetime, timedelta
+        hours_since = (datetime.now() - last_crm['sent_at']).total_seconds() / 3600
+        return hours_since <= 48
+
+    @staticmethod
+    async def stop_cadence(user_id: int, reason: str):
+        """
+        Stop all CRM cadence for user (set to Level 3).
+        Cancels pending tasks and creates FAREWELL task.
+        """
+        # Set level to 3 and record reason
+        await db.execute(
+            """
+            UPDATE users
+            SET crm_cadence_level = 3,
+                crm_stopped_reason = $2
+            WHERE id = $1
+            """,
+            user_id, reason
+        )
+
+        # Cancel all pending CRM tasks
+        cancelled = await db.execute(
+            """
+            UPDATE admin_tasks
+            SET status = 'cancelled', updated_at = now()
+            WHERE user_id = $1
+            AND status IN ('scheduled', 'due')
+            AND type IN ('PING', 'NUDGE_SUB', 'DAILY_MSG_PROMPT', 'RECOVERY', 'LIMIT_INFO')
+            """,
+            user_id
+        )
+
+        # Create FAREWELL task (delayed 1 hour)
+        from datetime import datetime, timedelta
+        await AdminTaskModel.create_task(
+            user_id=user_id,
+            task_type='FAREWELL',
+            due_at=datetime.now() + timedelta(hours=1),
+            payload={'reason': reason}
+        )
+
+        await EventModel.log_event(
+            user_id=user_id,
+            event_type='cadence_stopped',
+            meta={'reason': reason, 'cancelled_tasks': cancelled}
+        )
+
+        logger.info(f"User {user_id} CRM stopped (reason: {reason})")
+
+

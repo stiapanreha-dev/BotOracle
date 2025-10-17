@@ -10,7 +10,7 @@ from typing import List, Dict, Any
 
 from app.database.models import (
     AdminTaskModel, UserPrefsModel, DailyMessageModel,
-    SubscriptionModel, AdminTemplateModel
+    SubscriptionModel, AdminTemplateModel, CadenceManager
 )
 from app.database.connection import db
 
@@ -45,6 +45,14 @@ class CRMPlanner:
                 prefs = await UserPrefsModel.get_prefs(user_id)
                 cadence = await UserPrefsModel.get_cadence(user_id)
 
+            # Update cadence level based on response time (adaptive CRM)
+            cadence_level = await CadenceManager.update_cadence_level(user_id)
+
+            # Level 3 (Stopped): No proactive contacts
+            if cadence_level == 3:
+                logger.info(f"User {user_id} on Level 3 (Stopped) - no tasks created")
+                return 0
+
             # Skip if user disabled proactive contacts
             if not prefs.get('allow_proactive', True):
                 return 0
@@ -57,8 +65,8 @@ class CRMPlanner:
             if remaining_slots == 0:
                 return 0
 
-            # Determine candidate tasks
-            candidates = await self._get_candidate_tasks(user, prefs, cadence)
+            # Determine candidate tasks (level-aware)
+            candidates = await self._get_candidate_tasks(user, prefs, cadence, cadence_level)
 
             # Select tasks for today
             selected_tasks = self._select_tasks(candidates, remaining_slots)
@@ -87,11 +95,24 @@ class CRMPlanner:
             return 0
 
     async def _get_candidate_tasks(self, user: Dict[str, Any], prefs: Dict[str, Any],
-                                 cadence: Dict[str, Any]) -> List[str]:
-        """Determine which tasks are candidates for this user"""
+                                 cadence: Dict[str, Any], cadence_level: int) -> List[str]:
+        """Determine which tasks are candidates for this user (level-aware)"""
         candidates = []
         user_id = user['id']
 
+        # Level 2 (Reduced): Only gentle RECOVERY, NO DAILY_MSG
+        if cadence_level == 2:
+            # Only soft RECOVERY if inactive for 7+ days
+            last_seen = user.get('last_seen_at')
+            if last_seen and (datetime.now() - last_seen).days >= 7:
+                # Check if last RECOVERY was more than 5 days ago
+                last_recovery = await self._get_last_task_time(user_id, 'RECOVERY')
+                if not last_recovery or (datetime.now() - last_recovery).days >= 5:
+                    candidates.append('RECOVERY')
+                    logger.info(f"User {user_id} on Level 2 (Reduced) - only RECOVERY candidate")
+            return candidates
+
+        # Level 1 (Normal): Full CRM logic
         # DAILY_MSG_PROMPT - daily whisper
         daily_sent_today = await DailyMessageModel.is_sent_today(user_id)
         if not daily_sent_today:

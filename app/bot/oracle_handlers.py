@@ -11,7 +11,7 @@ import logging
 
 from app.database.models import (
     UserModel, DailyMessageModel, OracleQuestionModel,
-    SubscriptionModel, AdminTaskModel
+    SubscriptionModel, AdminTaskModel, CadenceManager
 )
 from app.database.connection import db
 from app.services.persona import persona_factory, get_admin_response
@@ -314,6 +314,11 @@ async def question_handler(message: types.Message, state: FSMContext):
         if not (has_old_onboarding or has_new_onboarding):
             await message.answer("Сначала давай познакомимся! Напиши /start")
             return
+
+        # Track CRM response if applicable (adaptive cadence system)
+        if await CadenceManager.is_response_to_crm(user['id']):
+            await CadenceManager.track_crm_response(user['id'])
+            logger.info(f"User {user['id']} responded to CRM - cadence restored to Level 1")
 
         persona = persona_factory(user)
         question = message.text.strip()

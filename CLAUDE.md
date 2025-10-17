@@ -461,6 +461,12 @@ railway variables
 
 # Подключение к PostgreSQL
 railway connect postgres
+
+# Прямое подключение к Railway БД (продакшн)
+psql "postgresql://postgres:whZwATonBMvcVHvusZHsFBZUDBcTavZc@interchange.proxy.rlwy.net:48072/railway"
+
+# Получить структуру таблицы
+psql "postgresql://postgres:whZwATonBMvcVHvusZHsFBZUDBcTavZc@interchange.proxy.rlwy.net:48072/railway" -c "\d users"
 ```
 
 ### Database Management
