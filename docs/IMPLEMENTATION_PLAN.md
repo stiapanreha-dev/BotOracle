@@ -240,9 +240,10 @@ template = await AdminTemplateModel.get_template(task_type, persona.tone)
   - ✅ track_crm_response()
   - ✅ is_response_to_crm()
   - ✅ stop_cadence()
-- [x] Отслеживание ответов в handlers (oracle_handlers.py:318-321)
+- [x] Отслеживание ответов в handlers (oracle_handlers.py:318-327)
   - ✅ Проверка CRM контакта в 48ч окне
-  - ✅ Автовосстановление на Level 1
+  - ✅ Автовосстановление на Level 1 при ответе на CRM
+  - ✅ Автовосстановление на Level 1 при ЛЮБОЙ активности с Level 2/3
 - [x] Planner обновлен с level-aware логикой (planner.py:48-69, 97-143)
   - ✅ Level 3 → 0 задач
   - ✅ Level 2 → только RECOVERY раз в 5 дней
@@ -250,8 +251,11 @@ template = await AdminTemplateModel.get_template(task_type, persona.tone)
 - [x] Dispatcher обрабатывает FAREWELL (уже работает через шаблоны)
   - ✅ 3 FAREWELL шаблона в миграции 014
   - ✅ Dispatcher.get_task_message() поддерживает любые типы
-- [ ] Все сценарии протестированы на Railway
-  - ⏳ Требуется деплой и ручное тестирование
+- [x] Все сценарии протестированы на Railway
+  - ✅ Scenario 1: Level 1→2 (снижение после 2 дней)
+  - ✅ Scenario 2: Level 2→3 (снижение после 14 дней + FAREWELL)
+  - ✅ Scenario 3: Level 2→1 (восстановление на ответ в 48ч окне)
+  - ✅ Scenario 4: Level 3→1 (восстановление на любую активность)
 - [x] Логирование работает
   - ✅ models.py:746, 787 - изменения level
   - ✅ handlers.py:321 - ответы на CRM
@@ -265,5 +269,8 @@ template = await AdminTemplateModel.get_template(task_type, persona.tone)
 
 ---
 
-**Статус**: ✅ Code Complete, Ready for Deploy & Testing
-**Следующий шаг**: Деплой на Railway → Тестирование сценариев
+**Статус**: ✅ Deployed & Fully Tested on Railway
+**Дата завершения**: 2025-01-17
+**Коммиты**:
+  - Initial implementation: 0a4321e
+  - Bug fix (ANY activity restoration): bc95543
