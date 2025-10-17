@@ -319,6 +319,12 @@ async def question_handler(message: types.Message, state: FSMContext):
         if await CadenceManager.is_response_to_crm(user['id']):
             await CadenceManager.track_crm_response(user['id'])
             logger.info(f"User {user['id']} responded to CRM - cadence restored to Level 1")
+        else:
+            # Check if user is on Level 2 or 3 - any activity restores to Level 1
+            current_level = await CadenceManager.get_cadence_level(user['id'])
+            if current_level > 1:
+                await CadenceManager.track_crm_response(user['id'])  # Restore to Level 1
+                logger.info(f"User {user['id']} on Level {current_level} initiated contact - cadence restored to Level 1")
 
         persona = persona_factory(user)
         question = message.text.strip()
