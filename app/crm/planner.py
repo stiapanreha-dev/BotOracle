@@ -211,6 +211,17 @@ class CRMPlanner:
 
         return selected
 
+    def _is_in_quiet_hours(self, check_time: time, quiet_start: time, quiet_end: time) -> bool:
+        """Check if time is in quiet hours (handles midnight crossing)"""
+        if quiet_start <= quiet_end:
+            # Normal range (e.g., 08:00-22:00 active hours)
+            # So we're in quiet if NOT in this range
+            return not (quiet_start <= check_time <= quiet_end)
+        else:
+            # Range crosses midnight (e.g., 22:00-08:00 quiet hours)
+            # We're in quiet if >= start OR <= end
+            return check_time >= quiet_start or check_time <= quiet_end
+
     def _calculate_due_time(self, prefs: Dict[str, Any], cadence: Dict[str, Any]) -> datetime:
         """Calculate when task should be executed"""
         # Get preferred time windows
@@ -236,21 +247,31 @@ class CRMPlanner:
         hour = random.randint(start_hour, end_hour - 1)
         minute = random.randint(0, 59)
 
-        # Check quiet hours
-        quiet_start = prefs.get('quiet_start', time(22, 0))
-        quiet_end = prefs.get('quiet_end', time(8, 0))
-
         due_time = datetime.now().replace(
             hour=hour, minute=minute, second=0, microsecond=0
         )
 
-        # If falls in quiet hours, move to 9:15 AM
-        if (quiet_start <= time(hour, minute) or time(hour, minute) <= quiet_end):
-            due_time = due_time.replace(hour=9, minute=15)
-
-        # Add some jitter (±15 minutes)
+        # Add jitter BEFORE quiet hours check (±15 minutes)
         jitter_minutes = random.randint(-15, 15)
         due_time += timedelta(minutes=jitter_minutes)
+
+        # Check quiet hours
+        quiet_start = prefs.get('quiet_start', time(22, 0))
+        quiet_end = prefs.get('quiet_end', time(8, 0))
+
+        # If falls in quiet hours, move to 9:15 AM
+        if self._is_in_quiet_hours(due_time.time(), quiet_start, quiet_end):
+            logger.debug(f"Task time {due_time.time()} falls in quiet hours ({quiet_start}-{quiet_end}), moving to 9:15 AM")
+            due_time = due_time.replace(hour=9, minute=15)
+
+            # Add small jitter for 9:15 tasks (±5 minutes) to avoid all hitting exactly 9:15
+            small_jitter = random.randint(-5, 5)
+            due_time += timedelta(minutes=small_jitter)
+
+            # Final safety check: ensure we didn't jitter back into quiet hours
+            if self._is_in_quiet_hours(due_time.time(), quiet_start, quiet_end):
+                logger.warning(f"Jitter moved task back to quiet hours, resetting to 9:15")
+                due_time = due_time.replace(hour=9, minute=15)
 
         return due_time
 

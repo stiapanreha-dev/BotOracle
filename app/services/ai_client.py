@@ -106,13 +106,13 @@ class AIClient:
             logger.error(f"Error loading conversation history: {e}")
             return []
 
-    async def _save_to_history(self, user_id: int, persona: str, role: str, content: str):
+    async def _save_to_history(self, user_id: int, persona: str, role: str, content: str, message_type: str = 'dialog'):
         """Save message to conversation history"""
         try:
             await db.execute("""
-                INSERT INTO conversation_history (user_id, persona, role, content)
-                VALUES ($1, $2, $3, $4)
-            """, user_id, persona, role, content)
+                INSERT INTO conversation_history (user_id, persona, role, content, message_type)
+                VALUES ($1, $2, $3, $4, $5)
+            """, user_id, persona, role, content, message_type)
         except Exception as e:
             logger.error(f"Error saving to conversation history: {e}")
 

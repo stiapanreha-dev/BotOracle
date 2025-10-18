@@ -11,6 +11,7 @@ from app.database.models import (
     UserModel
 )
 from app.services.persona import persona_factory
+from app.database.connection import db
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,21 @@ class CRMDispatcher:
 
     def __init__(self, bot):
         self.bot = bot
+
+    async def _save_crm_message_to_history(self, user_id: int, task_type: str, message_text: str):
+        """Save CRM message to conversation history for analytics"""
+        try:
+            # Map task type to message_type
+            message_type = f"crm_{task_type.lower()}"
+
+            await db.execute("""
+                INSERT INTO conversation_history (user_id, persona, role, content, message_type)
+                VALUES ($1, $2, $3, $4, $5)
+            """, user_id, 'admin', 'assistant', message_text, message_type)
+
+            logger.debug(f"Saved CRM message to history: user={user_id}, type={message_type}")
+        except Exception as e:
+            logger.error(f"Error saving CRM message to history: {e}")
 
     async def dispatch_due_tasks(self, limit: int = 100) -> Dict[str, int]:
         """Execute all due admin tasks"""
@@ -68,6 +84,9 @@ class CRMDispatcher:
 
                 # Mark task as sent
                 await AdminTaskModel.mark_sent(task_id)
+
+                # Save CRM message to conversation history for analytics
+                await self._save_crm_message_to_history(user_id, task_type, message_text)
 
                 # Create engagement session for daily messages
                 if task_type in ('DAILY_MSG_PROMPT', 'DAILY_MSG_PUSH'):
