@@ -159,20 +159,17 @@ class CRMDispatcher:
                         payload = json.loads(payload)
                     user_context['remaining'] = payload.get('remaining', 0)
 
-                # Generate message via AI
+                # Generate message via AI (includes personalized greeting)
                 message = await generate_crm_message(task_type, user_context)
-
-                # Apply persona wrapping
-                return persona.wrap(message)
+                return message
 
             # Fallback to template-based generation for other types
             template = await AdminTemplateModel.get_template(task_type, persona.tone)
-            message = persona.wrap(template)
-            return message
+            return template
 
         except Exception as e:
             logger.error(f"Error generating message for task {task_type}: {e}")
-            return persona.wrap("привет! я здесь, если что нужно 🌟")
+            return "привет! я здесь, если что нужно 🌟"
 
     async def create_immediate_reaction(self, user_id: int, reaction_type: str = 'THANKS'):
         """Create immediate reaction task (like THANKS for user messages)"""

@@ -46,19 +46,10 @@ class PersonaFactory:
         self.tone = get_tone_for_user(self.age, self.gender)
 
     def wrap(self, text: str, context: Optional[str] = None) -> str:
-        """Wrap message with persona addressing"""
-        if not USE_ADMIN_PERSONA:
-            return text
-
-        # Add context-specific modifications
-        if context == "free_answer":
-            return f"{self.address}, {text}"
-        elif context == "free_empty":
-            return f"{self.address}, {text}"
-        elif context == "oracle_limit":
-            return f"{self.address}, {text}"
-        else:
-            return f"{self.address}, {text}"
+        """Return message as-is - AI now generates greetings internally"""
+        # Changed: AI now generates personalized greetings based on user context
+        # No need to prepend hardcoded address
+        return text
 
     def format_daily_repeat(self) -> str:
         """Special message for repeat daily message request"""
