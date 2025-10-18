@@ -22,7 +22,7 @@ def build_address(age: Optional[int], gender: Optional[str]) -> str:
         if age and age <= 25:
             return "Дружище"
         else:
-            return "Уважаемый"
+            return "Друг"  # Changed from "Уважаемый" to "Друг" for informal communication
     else:
         # gender == "other" or None
         return "Друг"
